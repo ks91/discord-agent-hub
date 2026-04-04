@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "discord-agent-hub"
+version = "0.1.0"
+description = "Multi-user Discord hub for OpenAI, Claude Code, and Gemini agents"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "discord.py==2.7.1",
+  "openai==1.109.1",
+  "pydantic==2.11.10",
+  "python-dotenv==1.1.1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==8.4.2",
+  "pytest-asyncio==0.26.0",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
