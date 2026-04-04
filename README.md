@@ -46,47 +46,15 @@ src/discord_agent_hub/
   providers/
 ```
 
-## Development Order
+## Architecture
 
-The practical implementation order is:
-
-1. Build the hub around provider APIs first
-2. Stabilize session persistence and structured logs
-3. Add Discord workflow and agent definitions
-4. Add CLI-backed runtimes later as a separate execution layer
-
-That means the first serious provider targets should be:
+The current architecture is API-first:
 
 - OpenAI Responses API
 - Anthropic Messages API
 - Gemini API
 
-Then, after the hub is stable, add:
-
-- Codex CLI runtime
-- Claude Code runtime
-- Gemini CLI runtime
-
-The reason is simple: API providers are easier to test, easier to make multi-user safe, and easier to persist cleanly. CLI runtimes are still important, but they introduce process management, permissions, timeouts, resumable sessions, and filesystem/tool execution concerns.
-
-## Testing Strategy
-
-This project should be developed test-first wherever possible.
-
-The recommended approach is:
-
-- Write unit tests first for storage, logging, provider adapters, and message/session routing
-- Keep Discord and external provider integration thin
-- Mock provider clients at the boundary instead of mocking internal business logic
-- Prefer deterministic structured logs and database records over UI-only assertions
-
-The early test focus should be:
-
-- session creation and lookup
-- message persistence order
-- structured event logging
-- provider adapter request/response mapping
-- Discord thread to session resolution
+CLI runtimes such as Codex, Claude Code, and Gemini CLI are planned as a later execution layer on top of the same hub model.
 
 ## Structured Log Format
 
@@ -147,7 +115,6 @@ You can also run `/hub-status` to confirm which providers are configured.
 ## Roadmap
 
 - Add attachments and tool handling for OpenAI
-- Expand tests around session routing and provider boundaries
 - Move agent definitions from JSON-only management toward DB-backed management
 - Implement persistent subprocess-backed runtimes for Codex, Claude Code, and Gemini CLI
 - Add a `loglm` importer in `loglm` or a companion repository
