@@ -5,7 +5,8 @@ This file describes repository-specific conventions for developing `discord-agen
 
 ## Project Direction
 - Keep implementation API-first.
-- Treat CLI runtimes as a later layer unless the task explicitly requires them.
+- Prefer provider APIs and cloud-side tools over local CLI runtimes.
+- Treat CLI runtimes as out of scope unless the user explicitly wants server-side execution on the hub host.
 
 ## Local Environment
 - Use the local virtual environment in `./.venv/` when running Python commands.
@@ -31,6 +32,7 @@ This file describes repository-specific conventions for developing `discord-agen
 - Keep provider implementations thin and stateless where possible.
 - Keep conversation state in hub storage, not inside provider-specific hidden state, unless a runtime explicitly requires it.
 - New providers should ship with focused request/response mapping tests.
+- Prefer optional provider-side tools such as web search and code execution before adding local runtime execution.
 
 ## Discord Conventions
 - Keep Discord command handlers thin.

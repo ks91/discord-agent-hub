@@ -4,8 +4,7 @@ A new foundation for running shared AI agents for multiple users on Discord.
 
 Goals:
 
-- Use the current OpenAI Responses API
-- Support OpenAI, Claude Code, and Gemini CLI in one hub
+- Use the current OpenAI, Anthropic, and Gemini APIs
 - Let users define and add agents freely
 - Persist sessions and structured event logs
 - Keep logs easy to import into `loglm`
@@ -19,15 +18,14 @@ This initial implementation includes:
 - An OpenAI Responses API provider
 - An Anthropic Messages API provider
 - A Gemini API provider
-- Stub providers for Claude Code and Gemini CLI
 - A minimal Discord bot that binds one session to one Discord thread
 
 This is still missing or intentionally simplified:
 
-- Full session management for Claude Code and Gemini CLI
 - Attachment handling
 - Agent management UI
 - A `loglm` importer implementation
+- Optional cloud-side tools such as web search and code execution
 
 ## Layout
 
@@ -54,7 +52,7 @@ The current architecture is API-first:
 - Anthropic Messages API
 - Gemini API
 
-CLI runtimes such as Codex, Claude Code, and Gemini CLI are planned as a later execution layer on top of the same hub model.
+The current product direction is to focus on API providers and cloud-side tools first. Local CLI runtimes are possible in principle, but they are not a current priority because their effects are tied to the machine running the hub itself.
 
 ## Structured Log Format
 
@@ -114,7 +112,7 @@ You can also run `/hub-status` to confirm which providers are configured.
 
 ## Roadmap
 
+- Add optional provider-side tools such as web search and code execution
 - Add attachments and tool handling for OpenAI
 - Move agent definitions from JSON-only management toward DB-backed management
-- Implement persistent subprocess-backed runtimes for Codex, Claude Code, and Gemini CLI
 - Add a `loglm` importer in `loglm` or a companion repository
