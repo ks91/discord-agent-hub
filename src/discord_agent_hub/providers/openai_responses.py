@@ -25,10 +25,11 @@ class OpenAIResponsesProvider(Provider):
                 continue
             role = "assistant" if item.role == "assistant" else "user"
             text = item.content if not item.author_name else f"{item.author_name}: {item.content}"
+            content_type = "output_text" if role == "assistant" else "input_text"
             input_items.append(
                 {
                     "role": role,
-                    "content": [{"type": "input_text", "text": text}],
+                    "content": [{"type": content_type, "text": text}],
                 }
             )
 
