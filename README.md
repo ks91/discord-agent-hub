@@ -34,6 +34,8 @@ data/
   agents.json              agent definitions
   hub.sqlite3              sessions and messages
   events.jsonl             structured event log
+examples/
+  *.md                     import-ready agent definitions
 src/discord_agent_hub/
   main.py
   bot.py
@@ -90,6 +92,8 @@ When this is set, commands are synced to that guild immediately instead of waiti
 ## Discord Flow
 
 - `/agent-list`: shows available agents
+- `/agent-import`: imports an agent from a Markdown file with a ```agent block
+- `/agent-show`: shows the imported agent definition
 - `/chat [agent_id]`: creates a Discord thread and starts a session
 - Messages sent inside that thread are routed to the session's provider
 
@@ -109,6 +113,9 @@ The fastest way to start is:
 6. Send messages inside the created thread
 
 You can also run `/hub-status` to confirm which providers are configured.
+
+Sample import-ready agent files are available under `examples/`.
+If an imported agent already exists, re-run `/agent-import` with `overwrite:true` to replace it.
 
 ## Roadmap
 

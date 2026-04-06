@@ -14,6 +14,9 @@ DEFAULT_AGENTS = [
         "name": "OpenAI Default",
         "provider": "openai_responses",
         "model": "gpt-5.2",
+        "description": "Stable OpenAI default agent",
+        "enabled": True,
+        "tools": {},
         "instructions": "You are a helpful multi-user research assistant in Discord.",
         "metadata": {"supports_threads": True},
     },
@@ -22,6 +25,9 @@ DEFAULT_AGENTS = [
         "name": "Anthropic Default",
         "provider": "anthropic_messages",
         "model": "claude-sonnet-4-0",
+        "description": "Stable Anthropic default agent",
+        "enabled": True,
+        "tools": {},
         "instructions": "You are a helpful multi-user research assistant in Discord.",
         "metadata": {"supports_threads": True},
     },
@@ -30,6 +36,9 @@ DEFAULT_AGENTS = [
         "name": "Gemini Default",
         "provider": "gemini_api",
         "model": "gemini-2.5-pro",
+        "description": "Stable Gemini default agent",
+        "enabled": True,
+        "tools": {},
         "instructions": "You are a helpful multi-user research assistant in Discord.",
         "metadata": {"supports_threads": True},
     },
@@ -37,6 +46,9 @@ DEFAULT_AGENTS = [
         "id": "claude-code-default",
         "name": "Claude Code Default",
         "provider": "claude_code",
+        "description": "Stub Claude Code agent",
+        "enabled": True,
+        "tools": {},
         "instructions": "You are Claude Code running behind a Discord hub.",
         "metadata": {"supports_threads": True, "status": "stub"},
     },
@@ -44,6 +56,9 @@ DEFAULT_AGENTS = [
         "id": "gemini-cli-default",
         "name": "Gemini CLI Default",
         "provider": "gemini_cli",
+        "description": "Stub Gemini CLI agent",
+        "enabled": True,
+        "tools": {},
         "instructions": "You are Gemini CLI running behind a Discord hub.",
         "metadata": {"supports_threads": True, "status": "stub"},
     },
@@ -65,6 +80,9 @@ class AgentStore:
                 name=item["name"],
                 provider=ProviderKind(item["provider"]),
                 model=item.get("model"),
+                description=item.get("description", ""),
+                enabled=item.get("enabled", True),
+                tools=item.get("tools", {}),
                 instructions=item.get("instructions", ""),
                 command=item.get("command", []),
                 metadata=item.get("metadata", {}),
@@ -77,6 +95,29 @@ class AgentStore:
             if agent.id == agent_id:
                 return agent
         raise KeyError(f"Unknown agent_id: {agent_id}")
+
+    def save_agent(self, agent: AgentDefinition, *, overwrite: bool = False) -> None:
+        raw = json.loads(self.path.read_text(encoding="utf-8"))
+        existing_index = next((i for i, item in enumerate(raw) if item["id"] == agent.id), None)
+        serialized = {
+            "id": agent.id,
+            "name": agent.name,
+            "provider": agent.provider.value,
+            "model": agent.model,
+            "description": agent.description,
+            "enabled": agent.enabled,
+            "tools": agent.tools,
+            "instructions": agent.instructions,
+            "command": agent.command,
+            "metadata": agent.metadata,
+        }
+        if existing_index is None:
+            raw.append(serialized)
+        elif overwrite:
+            raw[existing_index] = serialized
+        else:
+            raise KeyError(f"Agent already exists: {agent.id}")
+        self.path.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 class HubStore:

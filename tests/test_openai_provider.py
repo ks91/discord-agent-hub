@@ -70,3 +70,24 @@ async def test_openai_provider_uses_input_text_for_user_and_output_text_for_assi
         },
     ]
     assert response.output_text == "reply"
+
+
+async def test_openai_provider_adds_selected_tools_to_request():
+    provider = OpenAIResponsesProvider(api_key="test-key", default_model="gpt-5.2")
+    provider.client = FakeOpenAIClient()
+    agent = AgentDefinition(
+        id="openai-tools",
+        name="OpenAI Tools",
+        provider=ProviderKind.OPENAI_RESPONSES,
+        model="gpt-5.2",
+        tools={"web_search": True, "code_execution": True},
+    )
+
+    await provider.generate(agent=agent, conversation=[], provider_session_id=None)
+
+    call = provider.client.responses.calls[0]
+    assert call["tools"] == [
+        {"type": "web_search"},
+        {"type": "code_interpreter", "container": {"type": "auto"}},
+    ]
+    assert call["tool_choice"] == "auto"

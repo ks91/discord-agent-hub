@@ -33,11 +33,21 @@ class OpenAIResponsesProvider(Provider):
                 }
             )
 
-        response = await self.client.responses.create(
-            model=agent.model or self.default_model,
-            instructions=instructions,
-            input=input_items,
-        )
+        request = {
+            "model": agent.model or self.default_model,
+            "instructions": instructions,
+            "input": input_items,
+        }
+        tools = []
+        if agent.tools.get("web_search"):
+            tools.append({"type": "web_search"})
+        if agent.tools.get("code_execution"):
+            tools.append({"type": "code_interpreter", "container": {"type": "auto"}})
+        if tools:
+            request["tools"] = tools
+            request["tool_choice"] = "auto"
+
+        response = await self.client.responses.create(**request)
         return ProviderResponse(
             output_text=response.output_text,
             provider_session_id=provider_session_id,

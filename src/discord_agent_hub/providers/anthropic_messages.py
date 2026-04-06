@@ -52,13 +52,38 @@ class AnthropicMessagesProvider(Provider):
             "system": agent.instructions or "You are a helpful assistant.",
             "messages": messages,
         }
+        tools = []
+        beta_headers = []
+        if agent.tools.get("web_search"):
+            tools.append(
+                {
+                    "type": "web_search_20250305",
+                    "name": "web_search",
+                    "max_uses": 5,
+                }
+            )
+        if agent.tools.get("code_execution"):
+            tools.append(
+                {
+                    "type": "code_execution_20250825",
+                    "name": "code_execution",
+                }
+            )
+            beta_headers.append("code-execution-2025-08-25")
+        if tools:
+            payload["tools"] = tools
+
+        headers = {
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        }
+        if beta_headers:
+            headers["anthropic-beta"] = ",".join(beta_headers)
+
         response = await self.http_client.post(
             "/v1/messages",
-            headers={
-                "x-api-key": self.api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
+            headers=headers,
             json=payload,
         )
         response.raise_for_status()

@@ -24,6 +24,9 @@ class AgentDefinition:
     name: str
     provider: ProviderKind
     model: str | None = None
+    description: str = ""
+    enabled: bool = True
+    tools: dict[str, bool] = field(default_factory=dict)
     instructions: str = ""
     command: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)

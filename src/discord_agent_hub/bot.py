@@ -7,6 +7,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from discord_agent_hub.agent_markdown import AgentMarkdownError, parse_agent_markdown
 from discord_agent_hub.config import Settings
 from discord_agent_hub.models import MessageRecord, utc_now
 from discord_agent_hub.providers.base import ProviderRegistry
@@ -39,6 +40,8 @@ class DiscordAgentHub(commands.Bot):
 
     async def setup_hook(self) -> None:
         self.tree.add_command(agent_list)
+        self.tree.add_command(agent_import)
+        self.tree.add_command(agent_show)
         self.tree.add_command(hub_status)
         self.tree.add_command(chat)
         if self.settings.dev_guild_id:
@@ -88,8 +91,117 @@ async def agent_list(interaction: discord.Interaction) -> None:
         return
 
     agents = bot.agent_store.list_agents()
-    lines = [f"- `{agent.id}`: {agent.name} ({agent.provider.value})" for agent in agents]
+    lines = [
+        f"- `{agent.id}`: {agent.name} ({agent.provider.value})"
+        + (f" - {agent.description}" if agent.description else "")
+        for agent in agents
+        if agent.enabled
+    ]
     await interaction.response.send_message("\n".join(lines), ephemeral=True)
+
+
+@app_commands.command(name="agent-import", description="Import an agent definition from a Markdown file")
+@app_commands.describe(
+    file="Markdown file containing a ```agent block and instructions body",
+    overwrite="Replace an existing agent with the same id",
+)
+async def agent_import(
+    interaction: discord.Interaction,
+    file: discord.Attachment,
+    overwrite: bool = False,
+) -> None:
+    bot = interaction.client
+    assert isinstance(bot, DiscordAgentHub)
+    if not bot.guild_allowed(interaction.guild):
+        await interaction.response.send_message("This server is not allowed.", ephemeral=True)
+        return
+    if not file.filename.lower().endswith(".md"):
+        await interaction.response.send_message("Please upload a `.md` file.", ephemeral=True)
+        return
+
+    raw = await file.read()
+    try:
+        agent = parse_agent_markdown(raw.decode("utf-8"))
+        bot.agent_store.save_agent(agent, overwrite=overwrite)
+    except UnicodeDecodeError:
+        await interaction.response.send_message("The uploaded file must be UTF-8 Markdown.", ephemeral=True)
+        return
+    except AgentMarkdownError as exc:
+        await interaction.response.send_message(f"Invalid agent Markdown: {exc}", ephemeral=True)
+        return
+    except KeyError:
+        await interaction.response.send_message(
+            f"Agent `{agent.id}` already exists. Re-run with `overwrite:true` to replace it.",
+            ephemeral=True,
+        )
+        return
+
+    bot.structured_logger.append(
+        "agent.imported",
+        imported_by_user_id=interaction.user.id,
+        agent_id=agent.id,
+        provider=agent.provider.value,
+        source_filename=file.filename,
+        overwrite=overwrite,
+    )
+    tools_text = ", ".join(f"{key}={value}" for key, value in sorted(agent.tools.items())) or "none"
+    await interaction.response.send_message(
+        "\n".join(
+            [
+                f"{'Updated' if overwrite else 'Imported'} `{agent.id}`",
+                f"Name: `{agent.name}`",
+                f"Provider: `{agent.provider.value}`",
+                f"Model: `{agent.model or 'default'}`",
+                f"Tools: `{tools_text}`",
+            ]
+        ),
+        ephemeral=True,
+    )
+
+
+@app_commands.command(name="agent-show", description="Show an agent definition")
+@app_commands.describe(agent_id="Agent ID to inspect")
+async def agent_show(interaction: discord.Interaction, agent_id: str) -> None:
+    bot = interaction.client
+    assert isinstance(bot, DiscordAgentHub)
+    if not bot.guild_allowed(interaction.guild):
+        await interaction.response.send_message("This server is not allowed.", ephemeral=True)
+        return
+
+    try:
+        agent = bot.agent_store.get_agent(agent_id)
+    except KeyError:
+        await interaction.response.send_message(
+            f"Unknown agent_id: `{agent_id}`. Use `/agent-list` to see valid options.",
+            ephemeral=True,
+        )
+        return
+
+    tools_text = ", ".join(f"{key}={value}" for key, value in sorted(agent.tools.items())) or "none"
+    instructions_preview = agent.instructions.strip()[:1200] or "(empty)"
+    lines = [
+        f"ID: `{agent.id}`",
+        f"Name: `{agent.name}`",
+        f"Provider: `{agent.provider.value}`",
+        f"Model: `{agent.model or 'default'}`",
+        f"Enabled: `{agent.enabled}`",
+        f"Tools: `{tools_text}`",
+    ]
+    if agent.description:
+        lines.append(f"Description: {agent.description}")
+    lines.append("")
+    lines.append("Instructions preview:")
+    lines.append(instructions_preview)
+    await interaction.response.send_message("\n".join(lines), ephemeral=True)
+
+
+@agent_show.autocomplete("agent_id")
+async def agent_show_agent_id_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    bot = interaction.client
+    assert isinstance(bot, DiscordAgentHub)
+    return _build_agent_choices(bot.agent_store, current)
 
 
 @app_commands.command(name="hub-status", description="Show configured providers and defaults")

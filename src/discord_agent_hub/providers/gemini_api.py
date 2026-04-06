@@ -52,6 +52,13 @@ class GeminiAPIProvider(Provider):
             },
             "contents": contents,
         }
+        tools = []
+        if agent.tools.get("web_search"):
+            tools.append({"google_search": {}})
+        if agent.tools.get("code_execution"):
+            tools.append({"code_execution": {}})
+        if tools:
+            payload["tools"] = tools
         model = agent.model or self.default_model
         response = await self.http_client.post(
             f"/v1beta/models/{model}:generateContent",

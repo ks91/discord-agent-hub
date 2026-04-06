@@ -92,3 +92,36 @@ async def test_anthropic_provider_requires_api_key():
         assert "ANTHROPIC_API_KEY" in str(exc)
     else:
         raise AssertionError("Expected RuntimeError when API key is missing")
+
+
+async def test_anthropic_provider_adds_selected_tools_and_beta_header():
+    captured = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured["headers"] = dict(request.headers)
+        captured["json"] = json.loads(request.content.decode("utf-8"))
+        return httpx.Response(200, json={"content": [{"type": "text", "text": "done"}]})
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://api.anthropic.com",
+    )
+    provider = AnthropicMessagesProvider(
+        api_key="test-key",
+        default_model="claude-sonnet-4-0",
+        http_client=client,
+    )
+    agent = AgentDefinition(
+        id="anthropic-tools",
+        name="Anthropic Tools",
+        provider=ProviderKind.ANTHROPIC_MESSAGES,
+        tools={"web_search": True, "code_execution": True},
+    )
+
+    await provider.generate(agent=agent, conversation=[], provider_session_id=None)
+
+    assert captured["json"]["tools"] == [
+        {"type": "web_search_20250305", "name": "web_search", "max_uses": 5},
+        {"type": "code_execution_20250825", "name": "code_execution"},
+    ]
+    assert captured["headers"]["anthropic-beta"] == "code-execution-2025-08-25"

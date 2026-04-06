@@ -88,3 +88,37 @@ async def test_gemini_provider_requires_api_key():
         assert "GEMINI_API_KEY" in str(exc)
     else:
         raise AssertionError("Expected RuntimeError when API key is missing")
+
+
+async def test_gemini_provider_adds_selected_tools_to_request():
+    captured = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured["json"] = json.loads(request.content.decode("utf-8"))
+        return httpx.Response(
+            200,
+            json={"candidates": [{"content": {"parts": [{"text": "done"}]}}]},
+        )
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://generativelanguage.googleapis.com",
+    )
+    provider = GeminiAPIProvider(
+        api_key="gemini-key",
+        default_model="gemini-2.5-pro",
+        http_client=client,
+    )
+    agent = AgentDefinition(
+        id="gemini-tools",
+        name="Gemini Tools",
+        provider=ProviderKind.GEMINI_API,
+        tools={"web_search": True, "code_execution": True},
+    )
+
+    await provider.generate(agent=agent, conversation=[], provider_session_id=None)
+
+    assert captured["json"]["tools"] == [
+        {"google_search": {}},
+        {"code_execution": {}},
+    ]
