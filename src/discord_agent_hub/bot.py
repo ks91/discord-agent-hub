@@ -66,12 +66,11 @@ class DiscordAgentHub(commands.Bot):
         self.tree.add_command(session_show)
         self.tree.add_command(log_export)
         self.tree.add_command(usage_report)
+        await self.tree.sync()
         if self.settings.dev_guild_id:
             guild = discord.Object(id=self.settings.dev_guild_id)
             self.tree.copy_global_to(guild=guild)
             await self.tree.sync(guild=guild)
-        else:
-            await self.tree.sync()
 
     def guild_allowed(self, guild: discord.Guild | None) -> bool:
         if guild is None:
