@@ -75,6 +75,12 @@ async def test_anthropic_provider_maps_conversation_and_extracts_text():
         {"role": "assistant", "content": [{"type": "text", "text": "Claude Default: Hi there"}]},
     ]
     assert response.output_text == "First line.\nSecond line."
+    assert response.usage == {
+        "input_tokens": None,
+        "output_tokens": None,
+        "cache_creation_input_tokens": None,
+        "cache_read_input_tokens": None,
+    }
 
 
 async def test_anthropic_provider_requires_api_key():

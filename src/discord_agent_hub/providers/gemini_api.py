@@ -87,6 +87,7 @@ class GeminiAPIProvider(Provider):
             output_text=output_text,
             provider_session_id=provider_session_id,
             raw_payload=body,
+            usage=self._extract_usage(body),
         )
 
     @staticmethod
@@ -100,3 +101,12 @@ class GeminiAPIProvider(Provider):
                 if text:
                     chunks.append(text)
         return "\n".join(chunks).strip()
+
+    @staticmethod
+    def _extract_usage(body: dict[str, Any]) -> dict[str, Any]:
+        usage = body.get("usageMetadata") or {}
+        return {
+            "input_tokens": usage.get("promptTokenCount"),
+            "output_tokens": usage.get("candidatesTokenCount"),
+            "total_tokens": usage.get("totalTokenCount"),
+        }

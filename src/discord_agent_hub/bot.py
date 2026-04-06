@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from io import BytesIO
 from dataclasses import replace
+import json
 import logging
 import mimetypes
 import time
@@ -20,6 +22,7 @@ except ImportError:  # pragma: no cover
     APIConnectionError = APITimeoutError = InternalServerError = RateLimitError = tuple()  # type: ignore[assignment]
 
 from discord_agent_hub.agent_markdown import AgentMarkdownError, parse_agent_markdown
+from discord_agent_hub.conversation_render import render_message_text
 from discord_agent_hub.config import Settings
 from discord_agent_hub.document_extract import DocumentExtractionError, extract_document_text, is_supported_document
 from discord_agent_hub.models import MessageRecord, utc_now
@@ -59,6 +62,8 @@ class DiscordAgentHub(commands.Bot):
         self.tree.add_command(agent_show)
         self.tree.add_command(hub_status)
         self.tree.add_command(chat)
+        self.tree.add_command(session_show)
+        self.tree.add_command(log_export)
         if self.settings.dev_guild_id:
             guild = discord.Object(id=self.settings.dev_guild_id)
             self.tree.copy_global_to(guild=guild)
@@ -271,6 +276,58 @@ def _build_agent_choices(agent_store: AgentStore, current: str) -> list[app_comm
 
 def _is_chat_eligible(agent) -> bool:
     return bool(agent.enabled)
+
+
+def _current_session(bot: DiscordAgentHub, channel) -> object | None:
+    channel_id = getattr(channel, "id", None)
+    if channel_id is None:
+        return None
+    return bot.hub_store.get_session_by_thread_id(channel_id)
+
+
+def _summarize_usage(events: list[dict]) -> dict[str, int]:
+    totals = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+    }
+    for event in events:
+        if event.get("event") != "response.assistant":
+            continue
+        usage = event.get("usage") or {}
+        for key in totals:
+            value = usage.get(key)
+            if isinstance(value, int):
+                totals[key] += value
+    return totals
+
+
+def _build_transcript_markdown(*, session, agent, messages: list[MessageRecord], usage: dict[str, int]) -> str:
+    lines = [
+        f"# Session Export",
+        "",
+        f"- session_id: `{session.id}`",
+        f"- agent_id: `{agent.id}`",
+        f"- agent_name: {agent.name}",
+        f"- provider: `{session.provider}`",
+        f"- created_at: `{session.created_at}`",
+        f"- messages: `{len(messages)}`",
+        f"- input_tokens: `{usage['input_tokens']}`",
+        f"- output_tokens: `{usage['output_tokens']}`",
+        f"- total_tokens: `{usage['total_tokens']}`",
+        "",
+        "## Transcript",
+        "",
+    ]
+    for item in messages:
+        speaker = item.author_name or item.role
+        lines.append(f"### {speaker} ({item.role})")
+        lines.append(f"_ts: {item.created_at}_")
+        lines.append("")
+        rendered = render_message_text(item) or "(empty)"
+        lines.append(rendered)
+        lines.append("")
+    return "\n".join(lines)
 
 
 @app_commands.command(name="agent-list", description="List available agents")
@@ -495,6 +552,67 @@ async def hub_status(interaction: discord.Interaction) -> None:
     await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
 
+@app_commands.command(name="session-show", description="Show details for the current session thread")
+async def session_show(interaction: discord.Interaction) -> None:
+    bot = interaction.client
+    assert isinstance(bot, DiscordAgentHub)
+    if not bot.guild_allowed(interaction.guild):
+        await interaction.response.send_message("This server is not allowed.", ephemeral=True)
+        return
+
+    session = _current_session(bot, interaction.channel)
+    if session is None:
+        await interaction.response.send_message("This command must be used inside a session thread.", ephemeral=True)
+        return
+
+    agent = bot.agent_store.get_agent(session.agent_id)
+    messages = bot.hub_store.list_messages(session.id)
+    events = bot.structured_logger.list_events(session_id=session.id)
+    usage = _summarize_usage(events)
+    queue_depth = _queue_depths_for(bot).get(session.discord_thread_id, 0)
+    lines = [
+        f"Session ID: `{session.id}`",
+        f"Agent: `{agent.id}` ({agent.name})",
+        f"Provider: `{session.provider}`",
+        f"Model: `{agent.model or 'default'}`",
+        f"Created at: `{session.created_at}`",
+        f"Created by user ID: `{session.created_by_user_id}`",
+        f"Messages: `{len(messages)}`",
+        f"Queue depth: `{queue_depth}`",
+        f"Input tokens: `{usage['input_tokens']}`",
+        f"Output tokens: `{usage['output_tokens']}`",
+        f"Total tokens: `{usage['total_tokens']}`",
+    ]
+    await interaction.response.send_message("\n".join(lines), ephemeral=True)
+
+
+@app_commands.command(name="log-export", description="Export the current session transcript and events")
+async def log_export(interaction: discord.Interaction) -> None:
+    bot = interaction.client
+    assert isinstance(bot, DiscordAgentHub)
+    if not bot.guild_allowed(interaction.guild):
+        await interaction.response.send_message("This server is not allowed.", ephemeral=True)
+        return
+
+    session = _current_session(bot, interaction.channel)
+    if session is None:
+        await interaction.response.send_message("This command must be used inside a session thread.", ephemeral=True)
+        return
+
+    agent = bot.agent_store.get_agent(session.agent_id)
+    messages = bot.hub_store.list_messages(session.id)
+    events = bot.structured_logger.list_events(session_id=session.id)
+    usage = _summarize_usage(events)
+    transcript = _build_transcript_markdown(session=session, agent=agent, messages=messages, usage=usage)
+    events_jsonl = "".join(json.dumps(event, ensure_ascii=False) + "\n" for event in events)
+
+    files = [
+        discord.File(BytesIO(transcript.encode("utf-8")), filename=f"{session.id}-transcript.md"),
+        discord.File(BytesIO(events_jsonl.encode("utf-8")), filename=f"{session.id}-events.jsonl"),
+    ]
+    await interaction.response.send_message("Session export", files=files, ephemeral=True)
+
+
 @app_commands.command(name="chat", description="Create a thread-bound chat session")
 @app_commands.describe(agent_id="Agent ID to use")
 async def chat(interaction: discord.Interaction, agent_id: str | None = None) -> None:
@@ -688,6 +806,7 @@ async def handle_user_message(bot: DiscordAgentHub, message: discord.Message) ->
                 provider=session.provider,
                 agent_id=agent.id,
                 content=response.output_text,
+                usage=response.usage,
                 raw_payload=response.raw_payload,
             )
             await _send_split(message.channel, response.output_text)

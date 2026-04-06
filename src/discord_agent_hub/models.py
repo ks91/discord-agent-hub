@@ -62,3 +62,4 @@ class ProviderResponse:
     output_text: str
     provider_session_id: str | None = None
     raw_payload: dict[str, Any] | None = None
+    usage: dict[str, Any] = field(default_factory=dict)

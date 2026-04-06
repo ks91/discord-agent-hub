@@ -23,3 +23,19 @@ class StructuredLogger:
         with self._lock:
             with self.path.open("a", encoding="utf-8") as fh:
                 fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+    def list_events(self, *, session_id: str | None = None) -> list[dict[str, Any]]:
+        if not self.path.exists():
+            return []
+        events: list[dict[str, Any]] = []
+        with self._lock:
+            with self.path.open("r", encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    payload = json.loads(line)
+                    if session_id is not None and payload.get("session_id") != session_id:
+                        continue
+                    events.append(payload)
+        return events

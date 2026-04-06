@@ -71,6 +71,11 @@ async def test_gemini_provider_maps_conversation_and_extracts_text():
         {"role": "model", "parts": [{"text": "Gemini Default: Hi"}]},
     ]
     assert response.output_text == "First answer.\nSecond answer."
+    assert response.usage == {
+        "input_tokens": None,
+        "output_tokens": None,
+        "total_tokens": None,
+    }
 
 
 async def test_gemini_provider_requires_api_key():

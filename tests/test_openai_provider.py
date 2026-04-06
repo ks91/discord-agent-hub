@@ -70,6 +70,11 @@ async def test_openai_provider_uses_input_text_for_user_and_output_text_for_assi
         },
     ]
     assert response.output_text == "reply"
+    assert response.usage == {
+        "input_tokens": None,
+        "output_tokens": None,
+        "total_tokens": None,
+    }
 
 
 async def test_openai_provider_adds_selected_tools_to_request():

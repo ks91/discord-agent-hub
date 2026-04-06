@@ -118,6 +118,7 @@ class AnthropicMessagesProvider(Provider):
             output_text=output_text,
             provider_session_id=provider_session_id,
             raw_payload=body,
+            usage=self._extract_usage(body),
         )
 
     @staticmethod
@@ -128,3 +129,13 @@ class AnthropicMessagesProvider(Provider):
             if item.get("type") == "text":
                 chunks.append(item.get("text", ""))
         return "\n".join(chunk for chunk in chunks if chunk).strip()
+
+    @staticmethod
+    def _extract_usage(body: dict[str, Any]) -> dict[str, Any]:
+        usage = body.get("usage") or {}
+        return {
+            "input_tokens": usage.get("input_tokens"),
+            "output_tokens": usage.get("output_tokens"),
+            "cache_creation_input_tokens": usage.get("cache_creation_input_tokens"),
+            "cache_read_input_tokens": usage.get("cache_read_input_tokens"),
+        }

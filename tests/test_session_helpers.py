@@ -1,0 +1,66 @@
+from discord_agent_hub.bot import _build_transcript_markdown, _summarize_usage
+from discord_agent_hub.models import AgentDefinition, MessageRecord, ProviderKind, SessionRecord
+
+
+def test_summarize_usage_totals_response_events():
+    usage = _summarize_usage(
+        [
+            {"event": "response.assistant", "usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}},
+            {"event": "response.assistant", "usage": {"input_tokens": 7, "output_tokens": 3, "total_tokens": 10}},
+            {"event": "message.user"},
+        ]
+    )
+
+    assert usage == {
+        "input_tokens": 17,
+        "output_tokens": 8,
+        "total_tokens": 25,
+    }
+
+
+def test_build_transcript_markdown_includes_metadata_and_messages():
+    session = SessionRecord(
+        id="s1",
+        agent_id="gpt-default",
+        provider="openai_responses",
+        discord_channel_id=1,
+        discord_thread_id=2,
+        discord_guild_id=3,
+        created_by_user_id=4,
+        created_at="2026-04-06T00:00:00+00:00",
+    )
+    agent = AgentDefinition(
+        id="gpt-default",
+        name="GPT Default",
+        provider=ProviderKind.OPENAI_RESPONSES,
+    )
+    messages = [
+        MessageRecord(
+            session_id="s1",
+            role="user",
+            author_id=1,
+            author_name="alice",
+            content="hello",
+            created_at="2026-04-06T00:00:01+00:00",
+        ),
+        MessageRecord(
+            session_id="s1",
+            role="assistant",
+            author_id=None,
+            author_name="GPT Default",
+            content="hi",
+            created_at="2026-04-06T00:00:02+00:00",
+        ),
+    ]
+
+    markdown = _build_transcript_markdown(
+        session=session,
+        agent=agent,
+        messages=messages,
+        usage={"input_tokens": 10, "output_tokens": 6, "total_tokens": 16},
+    )
+
+    assert "session_id: `s1`" in markdown
+    assert "agent_name: GPT Default" in markdown
+    assert "alice: hello" in markdown
+    assert "GPT Default: hi" in markdown
