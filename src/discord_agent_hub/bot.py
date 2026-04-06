@@ -577,7 +577,7 @@ async def agent_show_full(interaction: discord.Interaction, agent_id: str) -> No
         return
 
     lines = _agent_show_lines(agent=agent, full=True)
-    await interaction.response.send_message("\n".join(lines), ephemeral=True)
+    await _send_interaction_split(interaction, "\n".join(lines), ephemeral=True)
 
 
 @agent_show.autocomplete("agent_id")
