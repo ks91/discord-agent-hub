@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 
 from discord_agent_hub.models import AgentDefinition, ProviderKind
@@ -80,3 +82,24 @@ def test_agent_store_persists_public_instructions_flag(tmp_path):
     loaded = store.get_agent("secret-agent")
 
     assert loaded.public_instructions is False
+
+
+def test_agent_store_save_agent_handles_concurrent_imports(tmp_path):
+    store = AgentStore(tmp_path / "agents.json")
+
+    def save(index: int) -> None:
+        store.save_agent(
+            AgentDefinition(
+                id=f"concurrent-agent-{index}",
+                name=f"Concurrent Agent {index}",
+                provider=ProviderKind.OPENAI_RESPONSES,
+                instructions=f"agent {index}",
+            )
+        )
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(save, range(10)))
+
+    ids = {agent.id for agent in store.list_agents()}
+    for index in range(10):
+        assert f"concurrent-agent-{index}" in ids

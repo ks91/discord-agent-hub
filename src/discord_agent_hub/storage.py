@@ -4,6 +4,7 @@ import json
 import os
 import sqlite3
 import tempfile
+import threading
 import uuid
 from pathlib import Path
 
@@ -53,12 +54,15 @@ DEFAULT_AGENTS = [
 class AgentStore:
     def __init__(self, path: Path) -> None:
         self.path = path
+        self._lock = threading.RLock()
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        if not self.path.exists():
-            self._write_json_atomic(DEFAULT_AGENTS)
+        with self._lock:
+            if not self.path.exists():
+                self._write_json_atomic(DEFAULT_AGENTS)
 
     def list_agents(self) -> list[AgentDefinition]:
-        raw = json.loads(self.path.read_text(encoding="utf-8"))
+        with self._lock:
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
         return [
             AgentDefinition(
                 id=item["id"],
@@ -77,41 +81,44 @@ class AgentStore:
         ]
 
     def get_agent(self, agent_id: str) -> AgentDefinition:
-        for agent in self.list_agents():
-            if agent.id == agent_id:
-                return agent
+        with self._lock:
+            for agent in self.list_agents():
+                if agent.id == agent_id:
+                    return agent
         raise KeyError(f"Unknown agent_id: {agent_id}")
 
     def save_agent(self, agent: AgentDefinition, *, overwrite: bool = False) -> None:
-        raw = json.loads(self.path.read_text(encoding="utf-8"))
-        existing_index = next((i for i, item in enumerate(raw) if item["id"] == agent.id), None)
-        serialized = {
-            "id": agent.id,
-            "name": agent.name,
-            "provider": agent.provider.value,
-            "model": agent.model,
-            "description": agent.description,
-            "enabled": agent.enabled,
-            "public_instructions": agent.public_instructions,
-            "tools": agent.tools,
-            "instructions": agent.instructions,
-            "command": agent.command,
-            "metadata": agent.metadata,
-        }
-        if existing_index is None:
-            raw.append(serialized)
-        elif overwrite:
-            raw[existing_index] = serialized
-        else:
-            raise KeyError(f"Agent already exists: {agent.id}")
-        self._write_json_atomic(raw)
+        with self._lock:
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+            existing_index = next((i for i, item in enumerate(raw) if item["id"] == agent.id), None)
+            serialized = {
+                "id": agent.id,
+                "name": agent.name,
+                "provider": agent.provider.value,
+                "model": agent.model,
+                "description": agent.description,
+                "enabled": agent.enabled,
+                "public_instructions": agent.public_instructions,
+                "tools": agent.tools,
+                "instructions": agent.instructions,
+                "command": agent.command,
+                "metadata": agent.metadata,
+            }
+            if existing_index is None:
+                raw.append(serialized)
+            elif overwrite:
+                raw[existing_index] = serialized
+            else:
+                raise KeyError(f"Agent already exists: {agent.id}")
+            self._write_json_atomic(raw)
 
     def delete_agent(self, agent_id: str) -> None:
-        raw = json.loads(self.path.read_text(encoding="utf-8"))
-        filtered = [item for item in raw if item["id"] != agent_id]
-        if len(filtered) == len(raw):
-            raise KeyError(f"Unknown agent_id: {agent_id}")
-        self._write_json_atomic(filtered)
+        with self._lock:
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+            filtered = [item for item in raw if item["id"] != agent_id]
+            if len(filtered) == len(raw):
+                raise KeyError(f"Unknown agent_id: {agent_id}")
+            self._write_json_atomic(filtered)
 
     def _write_json_atomic(self, payload: list[dict]) -> None:
         fd, temp_name = tempfile.mkstemp(
