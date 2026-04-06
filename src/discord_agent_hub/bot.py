@@ -344,13 +344,17 @@ async def agent_show(interaction: discord.Interaction, agent_id: str) -> None:
         f"Provider: `{agent.provider.value}`",
         f"Model: `{agent.model or 'default'}`",
         f"Enabled: `{agent.enabled}`",
+        f"Public instructions: `{agent.public_instructions}`",
         f"Tools: `{tools_text}`",
     ]
     if agent.description:
         lines.append(f"Description: {agent.description}")
     lines.append("")
     lines.append("Instructions preview:")
-    lines.append(instructions_preview)
+    if agent.public_instructions:
+        lines.append(instructions_preview)
+    else:
+        lines.append("(hidden for this agent)")
     await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
 

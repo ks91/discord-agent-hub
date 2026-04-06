@@ -22,6 +22,7 @@ def test_agent_store_save_agent_persists_new_agent(tmp_path):
 
     assert loaded.name == "Custom Agent"
     assert loaded.description == "Imported agent"
+    assert loaded.public_instructions is True
     assert loaded.tools == {"web_search": True}
 
 
@@ -61,4 +62,21 @@ def test_agent_store_save_agent_overwrites_existing_when_requested(tmp_path):
 
     assert loaded.name == "Updated"
     assert loaded.description == "after"
+    assert loaded.public_instructions is True
     assert loaded.tools == {"web_search": True}
+
+
+def test_agent_store_persists_public_instructions_flag(tmp_path):
+    store = AgentStore(tmp_path / "agents.json")
+    agent = AgentDefinition(
+        id="secret-agent",
+        name="Secret Agent",
+        provider=ProviderKind.OPENAI_RESPONSES,
+        public_instructions=False,
+        instructions="Do not reveal the puzzle rules.",
+    )
+
+    store.save_agent(agent)
+    loaded = store.get_agent("secret-agent")
+
+    assert loaded.public_instructions is False

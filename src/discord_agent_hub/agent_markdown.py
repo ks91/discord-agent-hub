@@ -48,6 +48,7 @@ def parse_agent_markdown(markdown_text: str) -> AgentDefinition:
         model=str(metadata["model"]) if "model" in metadata else None,
         description=str(metadata.get("description", "")),
         enabled=bool(metadata.get("enabled", True)),
+        public_instructions=bool(metadata.get("public_instructions", True)),
         tools=tools,
         instructions=instructions,
         metadata={"import_format": "markdown-agent-block"},

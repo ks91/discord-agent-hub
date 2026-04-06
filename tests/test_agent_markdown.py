@@ -16,6 +16,7 @@ provider: anthropic_messages
 model: claude-sonnet-4-0
 description: Game studies assistant
 enabled: true
+public_instructions: false
 tools:
   web_search: true
   code_execution: false
@@ -36,6 +37,7 @@ Focus on evidence.
     assert agent.model == "claude-sonnet-4-0"
     assert agent.description == "Game studies assistant"
     assert agent.enabled is True
+    assert agent.public_instructions is False
     assert agent.tools == {"web_search": True, "code_execution": False}
     assert "You are GAMER PAT." in agent.instructions
     assert "## Instructions" in agent.instructions

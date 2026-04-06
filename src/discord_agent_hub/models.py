@@ -26,6 +26,7 @@ class AgentDefinition:
     model: str | None = None
     description: str = ""
     enabled: bool = True
+    public_instructions: bool = True
     tools: dict[str, bool] = field(default_factory=dict)
     instructions: str = ""
     command: list[str] = field(default_factory=list)
