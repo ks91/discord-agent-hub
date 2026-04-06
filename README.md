@@ -206,10 +206,13 @@ The current agent workflow is:
 
 - Create: import a new Markdown file with `/agent-import`
 - Inspect: use `/agent-show`
+- Inspect full public instructions: use `/agent-show-full`
 - Update: re-import the same agent with `/agent-import overwrite:true`
 - Delete: use `/agent-delete`
 
 This keeps agent definitions file-based and versionable, which fits long instruction prompts better than trying to manage everything through short slash-command arguments.
+
+For teaching and learning, `/agent-show-full` is useful when you want to read and imitate the full public prompt behind an agent instead of only seeing a short preview.
 
 The import format also supports:
 
