@@ -1,8 +1,8 @@
 # Komaro (listening cat)
 
 ```agent
-id: komaro-openai-agent
-name: コマロ (OpenAI)
+id: komaro-gpt-agent
+name: コマロ (GPT)
 provider: openai_responses
 model: gpt-5.4
 description: 傾聴する子猫

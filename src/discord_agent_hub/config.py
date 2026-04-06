@@ -19,7 +19,7 @@ class Settings(BaseModel):
     gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
     gemini_model: str = Field(default="gemini-2.5-pro", alias="GEMINI_MODEL")
     data_dir: Path = Field(default=Path("./data"), alias="DATA_DIR")
-    default_agent_id: str = Field(default="openai-default", alias="DEFAULT_AGENT_ID")
+    default_agent_id: str = Field(default="gpt-default", alias="DEFAULT_AGENT_ID")
     claude_code_command: str = Field(default="claude", alias="CLAUDE_CODE_COMMAND")
     gemini_cli_command: str = Field(default="gemini", alias="GEMINI_CLI_COMMAND")
 
@@ -43,7 +43,7 @@ def load_settings() -> Settings:
         "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY"),
         "GEMINI_MODEL": os.getenv("GEMINI_MODEL", "gemini-2.5-pro"),
         "DATA_DIR": os.getenv("DATA_DIR", "./data"),
-        "DEFAULT_AGENT_ID": os.getenv("DEFAULT_AGENT_ID", "openai-default"),
+        "DEFAULT_AGENT_ID": os.getenv("DEFAULT_AGENT_ID", "gpt-default"),
         "CLAUDE_CODE_COMMAND": os.getenv("CLAUDE_CODE_COMMAND", "claude"),
         "GEMINI_CLI_COMMAND": os.getenv("GEMINI_CLI_COMMAND", "gemini"),
     }

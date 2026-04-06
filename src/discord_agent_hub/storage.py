@@ -10,22 +10,22 @@ from discord_agent_hub.models import AgentDefinition, MessageRecord, ProviderKin
 
 DEFAULT_AGENTS = [
     {
-        "id": "openai-default",
-        "name": "OpenAI Default",
+        "id": "gpt-default",
+        "name": "GPT Default",
         "provider": "openai_responses",
         "model": "gpt-5.2",
-        "description": "Stable OpenAI default agent",
+        "description": "Stable GPT default agent",
         "enabled": True,
         "tools": {},
         "instructions": "You are a helpful multi-user research assistant in Discord.",
         "metadata": {"supports_threads": True},
     },
     {
-        "id": "anthropic-default",
-        "name": "Anthropic Default",
+        "id": "claude-default",
+        "name": "Claude Default",
         "provider": "anthropic_messages",
         "model": "claude-sonnet-4-0",
-        "description": "Stable Anthropic default agent",
+        "description": "Stable Claude default agent",
         "enabled": True,
         "tools": {},
         "instructions": "You are a helpful multi-user research assistant in Discord.",
@@ -41,26 +41,6 @@ DEFAULT_AGENTS = [
         "tools": {},
         "instructions": "You are a helpful multi-user research assistant in Discord.",
         "metadata": {"supports_threads": True},
-    },
-    {
-        "id": "claude-code-default",
-        "name": "Claude Code Default",
-        "provider": "claude_code",
-        "description": "Stub Claude Code agent",
-        "enabled": True,
-        "tools": {},
-        "instructions": "You are Claude Code running behind a Discord hub.",
-        "metadata": {"supports_threads": True, "status": "stub"},
-    },
-    {
-        "id": "gemini-cli-default",
-        "name": "Gemini CLI Default",
-        "provider": "gemini_cli",
-        "description": "Stub Gemini CLI agent",
-        "enabled": True,
-        "tools": {},
-        "instructions": "You are Gemini CLI running behind a Discord hub.",
-        "metadata": {"supports_threads": True, "status": "stub"},
     },
 ]
 
@@ -118,6 +98,13 @@ class AgentStore:
         else:
             raise KeyError(f"Agent already exists: {agent.id}")
         self.path.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def delete_agent(self, agent_id: str) -> None:
+        raw = json.loads(self.path.read_text(encoding="utf-8"))
+        filtered = [item for item in raw if item["id"] != agent_id]
+        if len(filtered) == len(raw):
+            raise KeyError(f"Unknown agent_id: {agent_id}")
+        self.path.write_text(json.dumps(filtered, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 class HubStore:

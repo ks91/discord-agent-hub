@@ -34,8 +34,8 @@ async def test_anthropic_provider_maps_conversation_and_extracts_text():
         http_client=client,
     )
     agent = AgentDefinition(
-        id="anthropic-default",
-        name="Anthropic Default",
+        id="claude-default",
+        name="Claude Default",
         provider=ProviderKind.ANTHROPIC_MESSAGES,
         model="claude-sonnet-4-0",
         instructions="Be precise.",
@@ -53,7 +53,7 @@ async def test_anthropic_provider_maps_conversation_and_extracts_text():
             session_id="s1",
             role="assistant",
             author_id=None,
-            author_name="Anthropic Default",
+            author_name="Claude Default",
             content="Hi there",
             created_at="2026-04-04T00:00:01+00:00",
         ),
@@ -72,7 +72,7 @@ async def test_anthropic_provider_maps_conversation_and_extracts_text():
     assert captured["json"]["system"] == "Be precise."
     assert captured["json"]["messages"] == [
         {"role": "user", "content": "alice: Hello"},
-        {"role": "assistant", "content": "Anthropic Default: Hi there"},
+        {"role": "assistant", "content": "Claude Default: Hi there"},
     ]
     assert response.output_text == "First line.\nSecond line."
 
@@ -80,8 +80,8 @@ async def test_anthropic_provider_maps_conversation_and_extracts_text():
 async def test_anthropic_provider_requires_api_key():
     provider = AnthropicMessagesProvider(api_key=None, default_model="claude-sonnet-4-0")
     agent = AgentDefinition(
-        id="anthropic-default",
-        name="Anthropic Default",
+        id="claude-default",
+        name="Claude Default",
         provider=ProviderKind.ANTHROPIC_MESSAGES,
         instructions="",
     )

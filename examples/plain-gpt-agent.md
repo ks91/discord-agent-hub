@@ -1,13 +1,13 @@
-# Plain OpenAI Agent
+# Plain GPT Agent
 
 This is a minimal example of an agent definition that can be imported with `/agent-import`.
 
 ```agent
-id: plain-openai-agent
-name: Plain OpenAI Agent
+id: plain-gpt-agent
+name: Plain GPT Agent
 provider: openai_responses
 model: gpt-5.2
-description: Minimal general-purpose OpenAI chat agent
+description: Minimal general-purpose GPT chat agent
 enabled: true
 tools:
   web_search: false

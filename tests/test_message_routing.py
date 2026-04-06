@@ -61,7 +61,7 @@ async def test_handle_user_message_routes_to_provider_and_persists(tmp_path):
     )
     bot = _build_fake_bot(tmp_path, "openai_responses", provider)
     session = bot.hub_store.create_session(
-        agent_id="openai-default",
+        agent_id="gpt-default",
         provider="openai_responses",
         discord_channel_id=100,
         discord_thread_id=200,
@@ -78,7 +78,7 @@ async def test_handle_user_message_routes_to_provider_and_persists(tmp_path):
     await handle_user_message(bot, message)
 
     assert len(provider.calls) == 1
-    assert provider.calls[0]["agent_id"] == "openai-default"
+    assert provider.calls[0]["agent_id"] == "gpt-default"
     assert [item.role for item in provider.calls[0]["conversation"]] == ["user"]
     assert channel.sent_messages == ["assistant reply"]
 
@@ -99,7 +99,7 @@ async def test_handle_user_message_routes_to_provider_and_persists(tmp_path):
 async def test_handle_user_message_reports_provider_error(tmp_path):
     bot = _build_fake_bot(tmp_path, "openai_responses", FailingProvider())
     bot.hub_store.create_session(
-        agent_id="openai-default",
+        agent_id="gpt-default",
         provider="openai_responses",
         discord_channel_id=100,
         discord_thread_id=200,

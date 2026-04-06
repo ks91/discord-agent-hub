@@ -6,6 +6,7 @@ from typing import Iterable
 import discord
 from discord import app_commands
 from discord.ext import commands
+from discord.ui import View
 
 from discord_agent_hub.agent_markdown import AgentMarkdownError, parse_agent_markdown
 from discord_agent_hub.config import Settings
@@ -41,6 +42,7 @@ class DiscordAgentHub(commands.Bot):
     async def setup_hook(self) -> None:
         self.tree.add_command(agent_list)
         self.tree.add_command(agent_import)
+        self.tree.add_command(agent_delete)
         self.tree.add_command(agent_show)
         self.tree.add_command(hub_status)
         self.tree.add_command(chat)
@@ -66,7 +68,7 @@ async def _send_split(thread: discord.Thread, content: str) -> None:
 
 def _build_agent_choices(agent_store: AgentStore, current: str) -> list[app_commands.Choice[str]]:
     current_lower = current.lower().strip()
-    matches: Iterable = agent_store.list_agents()
+    matches: Iterable = [agent for agent in agent_store.list_agents() if _is_chat_eligible(agent)]
     if current_lower:
         matches = [
             agent
@@ -80,6 +82,10 @@ def _build_agent_choices(agent_store: AgentStore, current: str) -> list[app_comm
         )
         for agent in list(matches)[:25]
     ]
+
+
+def _is_chat_eligible(agent) -> bool:
+    return bool(agent.enabled)
 
 
 @app_commands.command(name="agent-list", description="List available agents")
@@ -204,6 +210,83 @@ async def agent_show_agent_id_autocomplete(
     return _build_agent_choices(bot.agent_store, current)
 
 
+@app_commands.command(name="agent-delete", description="Delete an agent definition")
+@app_commands.describe(agent_id="Agent ID to delete")
+async def agent_delete(interaction: discord.Interaction, agent_id: str) -> None:
+    bot = interaction.client
+    assert isinstance(bot, DiscordAgentHub)
+    if not bot.guild_allowed(interaction.guild):
+        await interaction.response.send_message("This server is not allowed.", ephemeral=True)
+        return
+
+    try:
+        agent = bot.agent_store.get_agent(agent_id)
+    except KeyError:
+        await interaction.response.send_message(
+            f"Unknown agent_id: `{agent_id}`. Use `/agent-list` to see valid options.",
+            ephemeral=True,
+        )
+        return
+
+    lines = [
+        f"Delete `{agent.id}`?",
+        f"Name: `{agent.name}`",
+        f"Provider: `{agent.provider.value}`",
+        "This action cannot be undone.",
+    ]
+    await interaction.response.send_message(
+        "\n".join(lines),
+        ephemeral=True,
+        view=DeleteAgentConfirmView(bot=bot, agent_id=agent.id, agent_name=agent.name),
+    )
+
+
+@agent_delete.autocomplete("agent_id")
+async def agent_delete_agent_id_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    bot = interaction.client
+    assert isinstance(bot, DiscordAgentHub)
+    return _build_agent_choices(bot.agent_store, current)
+
+
+class DeleteAgentConfirmView(View):
+    def __init__(self, *, bot: DiscordAgentHub, agent_id: str, agent_name: str) -> None:
+        super().__init__(timeout=300)
+        self.bot = bot
+        self.agent_id = agent_id
+        self.agent_name = agent_name
+
+    @discord.ui.button(label="Delete", style=discord.ButtonStyle.red)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        try:
+            self.bot.agent_store.delete_agent(self.agent_id)
+        except KeyError:
+            await interaction.response.edit_message(
+                content=f"Agent `{self.agent_id}` no longer exists.",
+                view=None,
+            )
+            return
+
+        self.bot.structured_logger.append(
+            "agent.deleted",
+            deleted_by_user_id=interaction.user.id,
+            agent_id=self.agent_id,
+            agent_name=self.agent_name,
+        )
+        await interaction.response.edit_message(
+            content=f"Deleted `{self.agent_id}`.",
+            view=None,
+        )
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.edit_message(
+            content=f"Cancelled deletion of `{self.agent_id}`.",
+            view=None,
+        )
+
+
 @app_commands.command(name="hub-status", description="Show configured providers and defaults")
 async def hub_status(interaction: discord.Interaction) -> None:
     bot = interaction.client
@@ -231,9 +314,6 @@ async def chat(interaction: discord.Interaction, agent_id: str | None = None) ->
     if not bot.guild_allowed(interaction.guild):
         await interaction.response.send_message("This server is not allowed.", ephemeral=True)
         return
-    if not isinstance(interaction.channel, discord.TextChannel):
-        await interaction.response.send_message("Use this command in a text channel.", ephemeral=True)
-        return
 
     try:
         agent = bot.agent_store.get_agent(agent_id or bot.settings.default_agent_id)
@@ -242,6 +322,15 @@ async def chat(interaction: discord.Interaction, agent_id: str | None = None) ->
             f"Unknown agent_id: `{agent_id}`. Use `/agent-list` to see valid options.",
             ephemeral=True,
         )
+        return
+    if not _is_chat_eligible(agent):
+        await interaction.response.send_message(
+            f"Agent `{agent.id}` is currently disabled.",
+            ephemeral=True,
+        )
+        return
+    if not isinstance(interaction.channel, discord.TextChannel):
+        await interaction.response.send_message("Use this command in a text channel.", ephemeral=True)
         return
     await interaction.response.send_message(
         f"Starting session with `{agent.id}` / `{agent.provider.value}`"

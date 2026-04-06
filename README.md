@@ -94,6 +94,7 @@ When this is set, commands are synced to that guild immediately instead of waiti
 - `/agent-list`: shows available agents
 - `/agent-import`: imports an agent from a Markdown file with a ```agent block
 - `/agent-show`: shows the imported agent definition
+- `/agent-delete`: deletes an agent definition after confirmation
 - `/chat [agent_id]`: creates a Discord thread and starts a session
 - Messages sent inside that thread are routed to the session's provider
 
@@ -107,8 +108,8 @@ The fastest way to start is:
 3. Start the bot with `python -m discord_agent_hub.main`
 4. In Discord, run `/agent-list`
 5. Start a thread with one of:
-   `/chat agent_id:openai-default`
-   `/chat agent_id:anthropic-default`
+   `/chat agent_id:gpt-default`
+   `/chat agent_id:claude-default`
    `/chat agent_id:gemini-default`
 6. Send messages inside the created thread
 
@@ -116,6 +117,17 @@ You can also run `/hub-status` to confirm which providers are configured.
 
 Sample import-ready agent files are available under `examples/`.
 If an imported agent already exists, re-run `/agent-import` with `overwrite:true` to replace it.
+
+## Agent Management
+
+The current agent workflow is:
+
+- Create: import a new Markdown file with `/agent-import`
+- Inspect: use `/agent-show`
+- Update: re-import the same agent with `/agent-import overwrite:true`
+- Delete: use `/agent-delete`
+
+This keeps agent definitions file-based and versionable, which fits long instruction prompts better than trying to manage everything through short slash-command arguments.
 
 ## Roadmap
 

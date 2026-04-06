@@ -10,17 +10,17 @@ def test_build_agent_choices_returns_limited_results(tmp_path):
 
     assert choices
     assert len(choices) <= 25
-    assert any(choice.value == "openai-default" for choice in choices)
+    assert any(choice.value == "gpt-default" for choice in choices)
 
 
 def test_build_agent_choices_filters_by_id_or_name(tmp_path):
     store = AgentStore(tmp_path / "agents.json")
 
-    id_matches = _build_agent_choices(store, "anthropic")
+    id_matches = _build_agent_choices(store, "Claude")
     name_matches = _build_agent_choices(store, "Gemini")
 
-    assert [choice.value for choice in id_matches] == ["anthropic-default"]
-    assert [choice.value for choice in name_matches] == ["gemini-default", "gemini-cli-default"]
+    assert [choice.value for choice in id_matches] == ["claude-default"]
+    assert [choice.value for choice in name_matches] == ["gemini-default"]
 
 
 def test_settings_parse_dev_guild_id(tmp_path):
@@ -37,7 +37,7 @@ def test_settings_parse_dev_guild_id(tmp_path):
             "GEMINI_API_KEY": None,
             "GEMINI_MODEL": "gemini-2.5-pro",
             "DATA_DIR": str(tmp_path / "data"),
-            "DEFAULT_AGENT_ID": "openai-default",
+            "DEFAULT_AGENT_ID": "gpt-default",
             "CLAUDE_CODE_COMMAND": "claude",
             "GEMINI_CLI_COMMAND": "gemini",
         }

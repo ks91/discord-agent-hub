@@ -1,13 +1,13 @@
-# Research Anthropic Agent
+# Research Claude Agent
 
 This example enables web search for research-style conversations.
 
 ```agent
-id: research-anthropic-agent
-name: Research Anthropic Agent
+id: research-claude-agent
+name: Research Claude Agent
 provider: anthropic_messages
 model: claude-sonnet-4-0
-description: Research-oriented Anthropic agent with web search enabled
+description: Research-oriented Claude agent with web search enabled
 enabled: true
 tools:
   web_search: true
