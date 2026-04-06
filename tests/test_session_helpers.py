@@ -1,4 +1,11 @@
-from discord_agent_hub.bot import _build_transcript_markdown, _summarize_usage, _usage_report_lines
+import pytest
+
+from discord_agent_hub.bot import (
+    _build_transcript_markdown,
+    _summarize_usage,
+    _usage_report_lines,
+    _usage_report_lines_for_guild,
+)
 from discord_agent_hub.models import AgentDefinition, MessageRecord, ProviderKind, SessionRecord
 
 
@@ -103,3 +110,32 @@ def test_usage_report_lines_aggregate_top_counts():
     assert "- `openai_responses`: 2" in payload
     assert "- `gpt-default`: 2" in payload
     assert "- `1`: 2" in payload
+
+
+@pytest.mark.asyncio
+async def test_usage_report_lines_for_guild_prefers_display_names():
+    class FakeGuild:
+        id = 100
+
+        def get_member(self, user_id):
+            if user_id == 1:
+                return type("Member", (), {"display_name": "Alice"})()
+            return None
+
+    lines = await _usage_report_lines_for_guild(
+        [
+            {
+                "event": "response.assistant",
+                "provider": "openai_responses",
+                "agent_id": "gpt-default",
+                "created_by_user_id": 1,
+                "discord_guild_id": 100,
+                "usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+            }
+        ],
+        guild=FakeGuild(),
+    )
+
+    payload = "\n".join(lines)
+    assert "Top users" in payload
+    assert "- `Alice (1)`: 1" in payload

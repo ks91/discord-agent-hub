@@ -348,6 +348,57 @@ def _usage_report_lines(events: list[dict], *, guild_id: int | None = None) -> l
     return lines
 
 
+async def _usage_report_lines_for_guild(events: list[dict], *, guild) -> list[str]:
+    lines = _usage_report_lines(events, guild_id=getattr(guild, "id", None))
+    if not guild or "Top user IDs" not in lines:
+        return lines
+
+    user_ids: list[int] = []
+    for line in lines:
+        if not line.startswith("- `"):
+            continue
+        key = line.split("`", 2)[1]
+        if key.isdigit():
+            user_ids.append(int(key))
+
+    labels: dict[str, str] = {}
+    for user_id in user_ids:
+        member = None
+        getter = getattr(guild, "get_member", None)
+        if callable(getter):
+            member = getter(user_id)
+        if member is None:
+            fetcher = getattr(guild, "fetch_member", None)
+            if callable(fetcher):
+                try:
+                    member = await fetcher(user_id)
+                except Exception:
+                    member = None
+        if member is not None:
+            display_name = getattr(member, "display_name", None) or getattr(member, "name", None)
+            if display_name:
+                labels[str(user_id)] = f"{display_name} ({user_id})"
+
+    rewritten: list[str] = []
+    in_user_section = False
+    for line in lines:
+        if line == "Top user IDs":
+            in_user_section = True
+            rewritten.append("Top users")
+            continue
+        if in_user_section and line == "":
+            in_user_section = False
+            rewritten.append(line)
+            continue
+        if in_user_section and line.startswith("- `"):
+            key = line.split("`", 2)[1]
+            count = line.split(": ", 1)[1]
+            rewritten.append(f"- `{labels.get(key, key)}`: {count}")
+            continue
+        rewritten.append(line)
+    return rewritten
+
+
 def _build_transcript_markdown(*, session, agent, messages: list[MessageRecord], usage: dict[str, int]) -> str:
     lines = [
         f"# Session Export",
@@ -669,7 +720,7 @@ async def usage_report(interaction: discord.Interaction) -> None:
         return
 
     events = bot.structured_logger.list_events()
-    lines = _usage_report_lines(events, guild_id=interaction.guild_id)
+    lines = await _usage_report_lines_for_guild(events, guild=interaction.guild)
     await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
 
