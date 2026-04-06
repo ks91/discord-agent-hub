@@ -398,6 +398,31 @@ async def _usage_report_lines_for_guild(events: list[dict], *, guild) -> list[st
     return rewritten
 
 
+def _agent_show_lines(*, agent, full: bool) -> list[str]:
+    tools_text = ", ".join(f"{key}={value}" for key, value in sorted(agent.tools.items())) or "none"
+    instructions_text = agent.instructions.strip() or "(empty)"
+    if not full:
+        instructions_text = instructions_text[:1200]
+    lines = [
+        f"ID: `{agent.id}`",
+        f"Name: `{agent.name}`",
+        f"Provider: `{agent.provider.value}`",
+        f"Model: `{agent.model or 'default'}`",
+        f"Enabled: `{agent.enabled}`",
+        f"Public instructions: `{agent.public_instructions}`",
+        f"Tools: `{tools_text}`",
+    ]
+    if agent.description:
+        lines.append(f"Description: {agent.description}")
+    lines.append("")
+    lines.append("Instructions:")
+    if agent.public_instructions:
+        lines.append(instructions_text)
+    else:
+        lines.append("(hidden for this agent)")
+    return lines
+
+
 def _build_transcript_markdown(*, session, agent, messages: list[MessageRecord], usage: dict[str, int]) -> str:
     lines = [
         f"# Session Export",
@@ -504,8 +529,11 @@ async def agent_import(
 
 
 @app_commands.command(name="agent-show", description="Show an agent definition")
-@app_commands.describe(agent_id="Agent ID to inspect")
-async def agent_show(interaction: discord.Interaction, agent_id: str) -> None:
+@app_commands.describe(
+    agent_id="Agent ID to inspect",
+    full="Show the full instructions instead of a preview",
+)
+async def agent_show(interaction: discord.Interaction, agent_id: str, full: bool = False) -> None:
     bot = interaction.client
     assert isinstance(bot, DiscordAgentHub)
     if not bot.guild_allowed(interaction.guild):
@@ -521,25 +549,7 @@ async def agent_show(interaction: discord.Interaction, agent_id: str) -> None:
         )
         return
 
-    tools_text = ", ".join(f"{key}={value}" for key, value in sorted(agent.tools.items())) or "none"
-    instructions_preview = agent.instructions.strip()[:1200] or "(empty)"
-    lines = [
-        f"ID: `{agent.id}`",
-        f"Name: `{agent.name}`",
-        f"Provider: `{agent.provider.value}`",
-        f"Model: `{agent.model or 'default'}`",
-        f"Enabled: `{agent.enabled}`",
-        f"Public instructions: `{agent.public_instructions}`",
-        f"Tools: `{tools_text}`",
-    ]
-    if agent.description:
-        lines.append(f"Description: {agent.description}")
-    lines.append("")
-    lines.append("Instructions preview:")
-    if agent.public_instructions:
-        lines.append(instructions_preview)
-    else:
-        lines.append("(hidden for this agent)")
+    lines = _agent_show_lines(agent=agent, full=full)
     await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
 

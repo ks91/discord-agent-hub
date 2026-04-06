@@ -1,5 +1,6 @@
-from discord_agent_hub.bot import _build_agent_choices
+from discord_agent_hub.bot import _agent_show_lines, _build_agent_choices
 from discord_agent_hub.config import Settings
+from discord_agent_hub.models import AgentDefinition, ProviderKind
 from discord_agent_hub.storage import AgentStore
 
 
@@ -52,3 +53,43 @@ def test_settings_parse_dev_guild_id(tmp_path):
     assert settings.provider_request_timeout_seconds == 90.0
     assert settings.provider_max_retries == 2
     assert settings.provider_retry_backoff_seconds == 1.0
+
+
+def test_agent_show_lines_uses_preview_by_default():
+    agent = AgentDefinition(
+        id="long-agent",
+        name="Long Agent",
+        provider=ProviderKind.OPENAI_RESPONSES,
+        instructions="x" * 1500,
+    )
+
+    lines = _agent_show_lines(agent=agent, full=False)
+
+    assert lines[-1] == "x" * 1200
+
+
+def test_agent_show_lines_can_show_full_instructions():
+    agent = AgentDefinition(
+        id="long-agent",
+        name="Long Agent",
+        provider=ProviderKind.OPENAI_RESPONSES,
+        instructions="x" * 1500,
+    )
+
+    lines = _agent_show_lines(agent=agent, full=True)
+
+    assert lines[-1] == "x" * 1500
+
+
+def test_agent_show_lines_respects_hidden_instructions():
+    agent = AgentDefinition(
+        id="hidden-agent",
+        name="Hidden Agent",
+        provider=ProviderKind.OPENAI_RESPONSES,
+        instructions="secret",
+        public_instructions=False,
+    )
+
+    lines = _agent_show_lines(agent=agent, full=True)
+
+    assert lines[-1] == "(hidden for this agent)"
