@@ -99,6 +99,22 @@ That is easier to maintain than forcing the bot to mimic raw `loglm` terminal lo
 
 If you update dependencies later, re-run `pip install -e .` inside the same virtual environment.
 
+For background operation on a server, you can also use:
+
+- `scripts/hubctl.sh start`
+- `scripts/hubctl.sh stop`
+- `scripts/hubctl.sh restart`
+- `scripts/hubctl.sh status`
+- `scripts/hubctl.sh logs`
+
+By default this script uses:
+
+- `./.venv/bin/python`
+- `./run/hub.pid`
+- `./logs/hub.log`
+
+You can override them with `HUB_PYTHON_BIN`, `HUB_PID_FILE`, and `HUB_LOG_FILE`.
+
 ### Fast Dev Setup
 
 If you want slash commands to appear quickly during development, set:
