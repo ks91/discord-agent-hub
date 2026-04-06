@@ -2,7 +2,7 @@
 
 ```agent
 id: komaro-openai-agent
-name: Komaro (OpenAI)
+name: コマロ (OpenAI)
 provider: openai_responses
 model: gpt-5.4
 description: 傾聴する子猫
