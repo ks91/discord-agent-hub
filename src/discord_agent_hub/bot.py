@@ -86,6 +86,13 @@ async def _send_split(thread: discord.Thread, content: str) -> None:
         await thread.send(chunk)
 
 
+async def _send_interaction_split(interaction: discord.Interaction, content: str, *, ephemeral: bool = True) -> None:
+    chunks = [content[i:i + 1800] for i in range(0, len(content), 1800)] or [""]
+    await interaction.response.send_message(chunks[0], ephemeral=ephemeral)
+    for chunk in chunks[1:]:
+        await interaction.followup.send(chunk, ephemeral=ephemeral)
+
+
 async def _extract_supported_attachments(message: discord.Message) -> list[dict[str, str]]:
     attachments = []
     for attachment in getattr(message, "attachments", []):
@@ -467,7 +474,7 @@ async def agent_list(interaction: discord.Interaction) -> None:
         for agent in agents
         if agent.enabled
     ]
-    await interaction.response.send_message("\n".join(lines), ephemeral=True)
+    await _send_interaction_split(interaction, "\n".join(lines), ephemeral=True)
 
 
 @app_commands.command(name="agent-import", description="Import an agent definition from a Markdown file")
@@ -548,7 +555,7 @@ async def agent_show(interaction: discord.Interaction, agent_id: str) -> None:
         return
 
     lines = _agent_show_lines(agent=agent, full=False)
-    await interaction.response.send_message("\n".join(lines), ephemeral=True)
+    await _send_interaction_split(interaction, "\n".join(lines), ephemeral=True)
 
 
 @app_commands.command(name="agent-show-full", description="Show the full public instructions for an agent")
