@@ -1,6 +1,7 @@
 .DS_Store
 .env
 .env~
+.Rhistory
 .pytest_cache/
 .venv/
 __pycache__/
