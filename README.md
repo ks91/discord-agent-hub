@@ -128,6 +128,7 @@ When this is set, commands are synced to that guild immediately instead of waiti
 - `/agent-list`: shows available agents
 - `/agent-import`: imports an agent from a Markdown file with a ```agent block
 - `/agent-show`: shows the imported agent definition
+- `/agent-show-full`: shows the full public instructions for an agent
 - `/agent-delete`: deletes an agent definition after confirmation
 - `/session-show`: shows the current thread's session metadata and token totals
 - `/log-export`: exports the current session transcript and JSONL events

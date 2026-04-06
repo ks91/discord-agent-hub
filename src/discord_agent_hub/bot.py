@@ -61,6 +61,7 @@ class DiscordAgentHub(commands.Bot):
         self.tree.add_command(agent_import)
         self.tree.add_command(agent_delete)
         self.tree.add_command(agent_show)
+        self.tree.add_command(agent_show_full)
         self.tree.add_command(hub_status)
         self.tree.add_command(chat)
         self.tree.add_command(session_show)
@@ -529,11 +530,8 @@ async def agent_import(
 
 
 @app_commands.command(name="agent-show", description="Show an agent definition")
-@app_commands.describe(
-    agent_id="Agent ID to inspect",
-    full="Show the full instructions instead of a preview",
-)
-async def agent_show(interaction: discord.Interaction, agent_id: str, full: bool = False) -> None:
+@app_commands.describe(agent_id="Agent ID to inspect")
+async def agent_show(interaction: discord.Interaction, agent_id: str) -> None:
     bot = interaction.client
     assert isinstance(bot, DiscordAgentHub)
     if not bot.guild_allowed(interaction.guild):
@@ -549,12 +547,43 @@ async def agent_show(interaction: discord.Interaction, agent_id: str, full: bool
         )
         return
 
-    lines = _agent_show_lines(agent=agent, full=full)
+    lines = _agent_show_lines(agent=agent, full=False)
+    await interaction.response.send_message("\n".join(lines), ephemeral=True)
+
+
+@app_commands.command(name="agent-show-full", description="Show the full public instructions for an agent")
+@app_commands.describe(agent_id="Agent ID to inspect")
+async def agent_show_full(interaction: discord.Interaction, agent_id: str) -> None:
+    bot = interaction.client
+    assert isinstance(bot, DiscordAgentHub)
+    if not bot.guild_allowed(interaction.guild):
+        await interaction.response.send_message("This server is not allowed.", ephemeral=True)
+        return
+
+    try:
+        agent = bot.agent_store.get_agent(agent_id)
+    except KeyError:
+        await interaction.response.send_message(
+            f"Unknown agent_id: `{agent_id}`. Use `/agent-list` to see valid options.",
+            ephemeral=True,
+        )
+        return
+
+    lines = _agent_show_lines(agent=agent, full=True)
     await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
 
 @agent_show.autocomplete("agent_id")
 async def agent_show_agent_id_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    bot = interaction.client
+    assert isinstance(bot, DiscordAgentHub)
+    return _build_agent_choices(bot.agent_store, current)
+
+
+@agent_show_full.autocomplete("agent_id")
+async def agent_show_full_agent_id_autocomplete(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
     bot = interaction.client
