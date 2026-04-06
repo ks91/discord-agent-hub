@@ -53,6 +53,7 @@ class MessageRecord:
     author_name: str | None
     content: str
     created_at: str
+    attachments: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(slots=True)

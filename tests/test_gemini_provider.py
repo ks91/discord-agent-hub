@@ -122,3 +122,116 @@ async def test_gemini_provider_adds_selected_tools_to_request():
         {"google_search": {}},
         {"code_execution": {}},
     ]
+
+
+async def test_gemini_provider_includes_image_attachments_in_user_messages():
+    captured = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured["json"] = json.loads(request.content.decode("utf-8"))
+        return httpx.Response(
+            200,
+            json={"candidates": [{"content": {"parts": [{"text": "done"}]}}]},
+        )
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://generativelanguage.googleapis.com",
+    )
+    provider = GeminiAPIProvider(
+        api_key="gemini-key",
+        default_model="gemini-2.5-pro",
+        http_client=client,
+    )
+    agent = AgentDefinition(
+        id="gemini-default",
+        name="Gemini Default",
+        provider=ProviderKind.GEMINI_API,
+    )
+    conversation = [
+        MessageRecord(
+            session_id="s1",
+            role="user",
+            author_id=1,
+            author_name="alice",
+            content="Describe this image",
+            attachments=[
+                {
+                    "type": "image",
+                    "filename": "cat.png",
+                    "media_type": "image/png",
+                    "data": "ZmFrZQ==",
+                }
+            ],
+            created_at="2026-04-06T00:00:00+00:00",
+        )
+    ]
+
+    await provider.generate(agent=agent, conversation=conversation, provider_session_id=None)
+
+    assert captured["json"]["contents"][0]["parts"] == [
+        {
+            "inline_data": {
+                "mime_type": "image/png",
+                "data": "ZmFrZQ==",
+            }
+        },
+        {
+            "text": "alice: Describe this image",
+        },
+    ]
+
+
+async def test_gemini_provider_omits_empty_text_when_image_only():
+    captured = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured["json"] = json.loads(request.content.decode("utf-8"))
+        return httpx.Response(
+            200,
+            json={"candidates": [{"content": {"parts": [{"text": "done"}]}}]},
+        )
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://generativelanguage.googleapis.com",
+    )
+    provider = GeminiAPIProvider(
+        api_key="gemini-key",
+        default_model="gemini-2.5-pro",
+        http_client=client,
+    )
+    agent = AgentDefinition(
+        id="gemini-default",
+        name="Gemini Default",
+        provider=ProviderKind.GEMINI_API,
+    )
+    conversation = [
+        MessageRecord(
+            session_id="s1",
+            role="user",
+            author_id=1,
+            author_name="alice",
+            content="",
+            attachments=[
+                {
+                    "type": "image",
+                    "filename": "cat.png",
+                    "media_type": "image/png",
+                    "data": "ZmFrZQ==",
+                }
+            ],
+            created_at="2026-04-06T00:00:00+00:00",
+        )
+    ]
+
+    await provider.generate(agent=agent, conversation=conversation, provider_session_id=None)
+
+    assert captured["json"]["contents"][0]["parts"] == [
+        {
+            "inline_data": {
+                "mime_type": "image/png",
+                "data": "ZmFrZQ==",
+            }
+        }
+    ]

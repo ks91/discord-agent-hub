@@ -38,11 +38,29 @@ class AnthropicMessagesProvider(Provider):
             if item.role == "system":
                 continue
             role = "assistant" if item.role == "assistant" else "user"
-            text = item.content if not item.author_name else f"{item.author_name}: {item.content}"
+            content = []
+            for attachment in item.attachments:
+                if attachment.get("type") != "image" or role == "assistant":
+                    continue
+                content.append(
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": attachment["media_type"],
+                            "data": attachment["data"],
+                        },
+                    }
+                )
+            text = item.content.strip()
+            if text and item.author_name:
+                text = f"{item.author_name}: {text}"
+            if text.strip() or not content:
+                content.append({"type": "text", "text": text})
             messages.append(
                 {
                     "role": role,
-                    "content": text,
+                    "content": content,
                 }
             )
 
@@ -86,7 +104,15 @@ class AnthropicMessagesProvider(Provider):
             headers=headers,
             json=payload,
         )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            detail = response.text.strip()
+            if detail:
+                raise RuntimeError(
+                    f"Anthropic API error {response.status_code}: {detail}"
+                ) from exc
+            raise
         body = response.json()
         output_text = self._extract_text(body)
         return ProviderResponse(

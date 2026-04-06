@@ -24,12 +24,24 @@ class OpenAIResponsesProvider(Provider):
             if item.role == "system":
                 continue
             role = "assistant" if item.role == "assistant" else "user"
-            text = item.content if not item.author_name else f"{item.author_name}: {item.content}"
             content_type = "output_text" if role == "assistant" else "input_text"
+            content = []
+            for attachment in item.attachments:
+                if attachment.get("type") != "image" or role == "assistant":
+                    continue
+                data_url = (
+                    f"data:{attachment['media_type']};base64,{attachment['data']}"
+                )
+                content.append({"type": "input_image", "image_url": data_url, "detail": "auto"})
+            text = item.content.strip()
+            if text and item.author_name:
+                text = f"{item.author_name}: {text}"
+            if text.strip() or not content:
+                content.append({"type": content_type, "text": text})
             input_items.append(
                 {
                     "role": role,
-                    "content": [{"type": content_type, "text": text}],
+                    "content": content,
                 }
             )
 

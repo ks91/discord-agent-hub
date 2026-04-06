@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import base64
+from dataclasses import replace
 import logging
+import mimetypes
 from typing import Iterable
 
 import discord
@@ -64,6 +67,42 @@ async def _send_split(thread: discord.Thread, content: str) -> None:
     chunks = [content[i:i + 1800] for i in range(0, len(content), 1800)] or [""]
     for chunk in chunks:
         await thread.send(chunk)
+
+
+async def _extract_image_attachments(message: discord.Message) -> list[dict[str, str]]:
+    attachments = []
+    for attachment in getattr(message, "attachments", []):
+        content_type = attachment.content_type or mimetypes.guess_type(attachment.filename)[0]
+        if not content_type or not content_type.startswith("image/"):
+            continue
+        raw = await attachment.read()
+        attachments.append(
+            {
+                "type": "image",
+                "filename": attachment.filename,
+                "media_type": content_type,
+                "data": base64.b64encode(raw).decode("ascii"),
+            }
+        )
+    return attachments
+
+
+def _compact_conversation_for_provider(conversation: list[MessageRecord]) -> list[MessageRecord]:
+    latest_user_image_index = None
+    for index, item in enumerate(conversation):
+        if item.role == "user" and any(att.get("type") == "image" for att in item.attachments):
+            latest_user_image_index = index
+
+    compacted = []
+    for index, item in enumerate(conversation):
+        if index == latest_user_image_index:
+            compacted.append(item)
+            continue
+        if item.attachments:
+            compacted.append(replace(item, attachments=[]))
+        else:
+            compacted.append(item)
+    return compacted
 
 
 def _build_agent_choices(agent_store: AgentStore, current: str) -> list[app_commands.Choice[str]]:
@@ -390,6 +429,7 @@ async def handle_user_message(bot: DiscordAgentHub, message: discord.Message) ->
         author_id=message.author.id,
         author_name=message.author.display_name,
         content=message.content,
+        attachments=await _extract_image_attachments(message),
         created_at=utc_now(),
     )
     bot.hub_store.add_message(user_record)
@@ -402,7 +442,7 @@ async def handle_user_message(bot: DiscordAgentHub, message: discord.Message) ->
         content=message.content,
     )
 
-    conversation = bot.hub_store.list_messages(session.id)
+    conversation = _compact_conversation_for_provider(bot.hub_store.list_messages(session.id))
     try:
         response = await provider.generate(
             agent=agent,

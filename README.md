@@ -98,6 +98,16 @@ When this is set, commands are synced to that guild immediately instead of waiti
 - `/chat [agent_id]`: creates a Discord thread and starts a session
 - Messages sent inside that thread are routed to the session's provider
 
+## Image Attachments
+
+Image attachments are currently supported for OpenAI, Anthropic, and Gemini chat agents.
+
+- Images are stored in local session history
+- Only image attachments are supported for now
+- When sending conversation history back to providers, only the most recent user image is re-sent
+
+This keeps research logs complete while avoiding oversized multimodal requests caused by repeatedly re-sending older images.
+
 ### Minimal "Plain LLM" Chat
 
 The fastest way to start is:

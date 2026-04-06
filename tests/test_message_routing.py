@@ -1,7 +1,8 @@
 from types import SimpleNamespace
 
-from discord_agent_hub.bot import handle_user_message
+from discord_agent_hub.bot import _compact_conversation_for_provider, handle_user_message
 from discord_agent_hub.models import ProviderResponse
+from discord_agent_hub.models import MessageRecord
 from discord_agent_hub.providers.base import ProviderRegistry
 from discord_agent_hub.storage import AgentStore, HubStore
 from discord_agent_hub.structured_log import StructuredLogger
@@ -118,3 +119,39 @@ async def test_handle_user_message_reports_provider_error(tmp_path):
     assert channel.sent_messages == ["Provider error: provider exploded"]
     event_log = (tmp_path / "events.jsonl").read_text(encoding="utf-8")
     assert "provider.error" in event_log
+
+
+def test_compact_conversation_keeps_only_latest_user_image():
+    conversation = [
+        MessageRecord(
+            session_id="s1",
+            role="user",
+            author_id=1,
+            author_name="alice",
+            content="first image",
+            created_at="2026-04-06T00:00:00+00:00",
+            attachments=[{"type": "image", "data": "first"}],
+        ),
+        MessageRecord(
+            session_id="s1",
+            role="assistant",
+            author_id=None,
+            author_name="GPT Default",
+            content="I saw it",
+            created_at="2026-04-06T00:00:01+00:00",
+        ),
+        MessageRecord(
+            session_id="s1",
+            role="user",
+            author_id=1,
+            author_name="alice",
+            content="second image",
+            created_at="2026-04-06T00:00:02+00:00",
+            attachments=[{"type": "image", "data": "second"}],
+        ),
+    ]
+
+    compacted = _compact_conversation_for_provider(conversation)
+
+    assert compacted[0].attachments == []
+    assert compacted[2].attachments == [{"type": "image", "data": "second"}]

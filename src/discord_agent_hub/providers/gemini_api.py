@@ -38,11 +38,27 @@ class GeminiAPIProvider(Provider):
             if item.role == "system":
                 continue
             role = "model" if item.role == "assistant" else "user"
-            text = item.content if not item.author_name else f"{item.author_name}: {item.content}"
+            parts = []
+            for attachment in item.attachments:
+                if attachment.get("type") != "image" or role == "model":
+                    continue
+                parts.append(
+                    {
+                        "inline_data": {
+                            "mime_type": attachment["media_type"],
+                            "data": attachment["data"],
+                        }
+                    }
+                )
+            text = item.content.strip()
+            if text and item.author_name:
+                text = f"{item.author_name}: {text}"
+            if text.strip() or not parts:
+                parts.append({"text": text})
             contents.append(
                 {
                     "role": role,
-                    "parts": [{"text": text}],
+                    "parts": parts,
                 }
             )
 

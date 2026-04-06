@@ -141,10 +141,16 @@ class HubStore:
                     author_id integer,
                     author_name text,
                     content text not null,
+                    attachments text not null default '[]',
                     created_at text not null
                 );
                 """
             )
+            existing_columns = {
+                row["name"] for row in conn.execute("pragma table_info(messages)").fetchall()
+            }
+            if "attachments" not in existing_columns:
+                conn.execute("alter table messages add column attachments text not null default '[]'")
 
     def create_session(
         self,
@@ -210,8 +216,8 @@ class HubStore:
         with self._connect() as conn:
             conn.execute(
                 """
-                insert into messages (session_id, role, author_id, author_name, content, created_at)
-                values (?, ?, ?, ?, ?, ?)
+                insert into messages (session_id, role, author_id, author_name, content, attachments, created_at)
+                values (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     message.session_id,
@@ -219,6 +225,7 @@ class HubStore:
                     message.author_id,
                     message.author_name,
                     message.content,
+                    json.dumps(message.attachments, ensure_ascii=False),
                     message.created_at,
                 ),
             )
@@ -226,7 +233,12 @@ class HubStore:
     def list_messages(self, session_id: str) -> list[MessageRecord]:
         with self._connect() as conn:
             rows = conn.execute(
-                "select session_id, role, author_id, author_name, content, created_at from messages where session_id = ? order by id asc",
+                "select session_id, role, author_id, author_name, content, attachments, created_at from messages where session_id = ? order by id asc",
                 (session_id,),
             ).fetchall()
-        return [MessageRecord(**dict(row)) for row in rows]
+        messages = []
+        for row in rows:
+            payload = dict(row)
+            payload["attachments"] = json.loads(payload.get("attachments") or "[]")
+            messages.append(MessageRecord(**payload))
+        return messages

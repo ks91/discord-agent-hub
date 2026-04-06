@@ -91,3 +91,85 @@ async def test_openai_provider_adds_selected_tools_to_request():
         {"type": "code_interpreter", "container": {"type": "auto"}},
     ]
     assert call["tool_choice"] == "auto"
+
+
+async def test_openai_provider_includes_image_attachments_in_user_messages():
+    provider = OpenAIResponsesProvider(api_key="test-key", default_model="gpt-5.2")
+    provider.client = FakeOpenAIClient()
+    agent = AgentDefinition(
+        id="gpt-default",
+        name="GPT Default",
+        provider=ProviderKind.OPENAI_RESPONSES,
+    )
+    conversation = [
+        MessageRecord(
+            session_id="s1",
+            role="user",
+            author_id=1,
+            author_name="alice",
+            content="What is in this image?",
+            attachments=[
+                {
+                    "type": "image",
+                    "filename": "cat.png",
+                    "media_type": "image/png",
+                    "data": "ZmFrZQ==",
+                }
+            ],
+            created_at="2026-04-06T00:00:00+00:00",
+        )
+    ]
+
+    await provider.generate(agent=agent, conversation=conversation, provider_session_id=None)
+
+    call = provider.client.responses.calls[0]
+    assert call["input"][0]["content"] == [
+        {
+            "type": "input_image",
+            "image_url": "data:image/png;base64,ZmFrZQ==",
+            "detail": "auto",
+        },
+        {
+            "type": "input_text",
+            "text": "alice: What is in this image?",
+        },
+    ]
+
+
+async def test_openai_provider_omits_empty_text_when_image_only():
+    provider = OpenAIResponsesProvider(api_key="test-key", default_model="gpt-5.2")
+    provider.client = FakeOpenAIClient()
+    agent = AgentDefinition(
+        id="gpt-default",
+        name="GPT Default",
+        provider=ProviderKind.OPENAI_RESPONSES,
+    )
+    conversation = [
+        MessageRecord(
+            session_id="s1",
+            role="user",
+            author_id=1,
+            author_name="alice",
+            content="",
+            attachments=[
+                {
+                    "type": "image",
+                    "filename": "cat.png",
+                    "media_type": "image/png",
+                    "data": "ZmFrZQ==",
+                }
+            ],
+            created_at="2026-04-06T00:00:00+00:00",
+        )
+    ]
+
+    await provider.generate(agent=agent, conversation=conversation, provider_session_id=None)
+
+    call = provider.client.responses.calls[0]
+    assert call["input"][0]["content"] == [
+        {
+            "type": "input_image",
+            "image_url": "data:image/png;base64,ZmFrZQ==",
+            "detail": "auto",
+        }
+    ]
