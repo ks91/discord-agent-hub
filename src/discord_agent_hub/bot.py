@@ -69,7 +69,7 @@ class DiscordAgentHub(commands.Bot):
         await self.tree.sync()
         if self.settings.dev_guild_id:
             guild = discord.Object(id=self.settings.dev_guild_id)
-            self.tree.clear_commands(guild=guild)
+            self.tree.copy_global_to(guild=guild)
             await self.tree.sync(guild=guild)
 
     def guild_allowed(self, guild: discord.Guild | None) -> bool:
