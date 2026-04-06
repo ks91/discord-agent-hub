@@ -11,6 +11,7 @@ class Settings(BaseModel):
     discord_bot_token: str = Field(alias="DISCORD_BOT_TOKEN")
     discord_client_id: str | None = Field(default=None, alias="DISCORD_CLIENT_ID")
     allowed_server_ids_raw: str = Field(default="", alias="ALLOWED_SERVER_IDS")
+    disallowed_role_ids_raw: str = Field(default="", alias="DISALLOWED_ROLE_IDS")
     dev_guild_id: int | None = Field(default=None, alias="DEV_GUILD_ID")
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     openai_model: str = Field(default="gpt-5.2", alias="OPENAI_MODEL")
@@ -31,6 +32,11 @@ class Settings(BaseModel):
         values = [item.strip() for item in self.allowed_server_ids_raw.split(",") if item.strip()]
         return {int(item) for item in values}
 
+    @property
+    def disallowed_role_ids(self) -> set[int]:
+        values = [item.strip() for item in self.disallowed_role_ids_raw.split(",") if item.strip()]
+        return {int(item) for item in values}
+
 
 def load_settings() -> Settings:
     load_dotenv()
@@ -38,6 +44,7 @@ def load_settings() -> Settings:
         "DISCORD_BOT_TOKEN": os.getenv("DISCORD_BOT_TOKEN", ""),
         "DISCORD_CLIENT_ID": os.getenv("DISCORD_CLIENT_ID"),
         "ALLOWED_SERVER_IDS": os.getenv("ALLOWED_SERVER_IDS", ""),
+        "DISALLOWED_ROLE_IDS": os.getenv("DISALLOWED_ROLE_IDS", ""),
         "DEV_GUILD_ID": os.getenv("DEV_GUILD_ID"),
         "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
         "OPENAI_MODEL": os.getenv("OPENAI_MODEL", "gpt-5.2"),

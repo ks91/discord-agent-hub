@@ -44,6 +44,7 @@ class DiscordAgentHub(commands.Bot):
         intents.message_content = True
         intents.guilds = True
         intents.messages = True
+        intents.members = True
         super().__init__(command_prefix="!", intents=intents)
         self.settings = settings
         self.agent_store = agent_store
@@ -128,6 +129,37 @@ def _queue_depths_for(bot) -> dict[int, int]:
         depths = {}
         setattr(bot, "_thread_queue_depths", depths)
     return depths
+
+
+async def _member_role_ids(bot: DiscordAgentHub, guild: discord.Guild | None, actor) -> set[int]:
+    if guild is None or actor is None:
+        return set()
+    roles = getattr(actor, "roles", None)
+    if roles is not None:
+        return {
+            role.id
+            for role in roles
+            if getattr(role, "id", None) is not None and getattr(role, "name", "") != "@everyone"
+        }
+    member_id = getattr(actor, "id", None)
+    if member_id is None:
+        return set()
+    try:
+        member = await guild.fetch_member(member_id)
+    except Exception:
+        return set()
+    return {
+        role.id
+        for role in getattr(member, "roles", [])
+        if getattr(role, "id", None) is not None and getattr(role, "name", "") != "@everyone"
+    }
+
+
+async def _is_disallowed_member(bot: DiscordAgentHub, guild: discord.Guild | None, actor) -> bool:
+    disallowed = getattr(bot.settings, "disallowed_role_ids", set())
+    if not disallowed:
+        return False
+    return bool(await _member_role_ids(bot, guild, actor) & disallowed)
 
 
 def _is_retryable_provider_error(exc: Exception) -> bool:
@@ -471,6 +503,19 @@ async def chat(interaction: discord.Interaction, agent_id: str | None = None) ->
     if not bot.guild_allowed(interaction.guild):
         await interaction.response.send_message("This server is not allowed.", ephemeral=True)
         return
+    if await _is_disallowed_member(bot, interaction.guild, interaction.user):
+        bot.structured_logger.append(
+            "auth.denied_role",
+            discord_guild_id=interaction.guild_id,
+            discord_channel_id=getattr(interaction.channel, "id", None),
+            user_id=interaction.user.id,
+            command="chat",
+        )
+        await interaction.response.send_message(
+            "You are not allowed to start AI chat sessions on this server.",
+            ephemeral=True,
+        )
+        return
 
     try:
         agent = bot.agent_store.get_agent(agent_id or bot.settings.default_agent_id)
@@ -536,6 +581,18 @@ async def chat_agent_id_autocomplete(
 async def handle_user_message(bot: DiscordAgentHub, message: discord.Message) -> None:
     session = bot.hub_store.get_session_by_thread_id(message.channel.id)
     if session is None:
+        return
+    guild = getattr(message, "guild", None)
+    if await _is_disallowed_member(bot, guild, message.author):
+        bot.structured_logger.append(
+            "auth.denied_role",
+            session_id=session.id,
+            discord_thread_id=message.channel.id,
+            discord_guild_id=getattr(guild, "id", None),
+            user_id=message.author.id,
+            command="message",
+        )
+        await message.channel.send("You are not allowed to use AI chat in this server.")
         return
 
     thread_id = message.channel.id

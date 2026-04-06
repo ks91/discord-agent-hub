@@ -91,6 +91,7 @@ def _build_fake_bot(tmp_path, provider_name: str, provider) -> SimpleNamespace:
         structured_logger=structured_logger,
         provider_registry=registry,
         settings=SimpleNamespace(
+            disallowed_role_ids=set(),
             provider_request_timeout_seconds=1.0,
             provider_max_retries=2,
             provider_retry_backoff_seconds=0.0,
@@ -259,6 +260,44 @@ async def test_handle_user_message_reports_timeout_after_retry_budget(tmp_path):
     await handle_user_message(bot, message)
 
     assert channel.sent_messages == ["Provider error: Provider timed out after 0.01s"]
+
+
+async def test_handle_user_message_blocks_disallowed_roles(tmp_path):
+    provider = FakeProvider(
+        ProviderResponse(
+            output_text="assistant reply",
+            provider_session_id="provider-session-1",
+            raw_payload={"ok": True},
+        )
+    )
+    bot = _build_fake_bot(tmp_path, "openai_responses", provider)
+    bot.settings.disallowed_role_ids = {2025}
+    bot.hub_store.create_session(
+        agent_id="gpt-default",
+        provider="openai_responses",
+        discord_channel_id=100,
+        discord_thread_id=200,
+        discord_guild_id=300,
+        created_by_user_id=400,
+    )
+    channel = FakeChannel(200)
+    message = SimpleNamespace(
+        author=SimpleNamespace(
+            id=123,
+            display_name="alice",
+            roles=[SimpleNamespace(id=2025, name="2025s-student")],
+        ),
+        content="hello world",
+        channel=channel,
+        guild=SimpleNamespace(id=300),
+    )
+
+    await handle_user_message(bot, message)
+
+    assert provider.calls == []
+    assert channel.sent_messages == ["You are not allowed to use AI chat in this server."]
+    event_log = (tmp_path / "events.jsonl").read_text(encoding="utf-8")
+    assert "auth.denied_role" in event_log
 
 
 def test_compact_conversation_keeps_only_latest_user_image():

@@ -29,6 +29,7 @@ def test_settings_parse_dev_guild_id(tmp_path):
             "DISCORD_BOT_TOKEN": "token",
             "DISCORD_CLIENT_ID": None,
             "ALLOWED_SERVER_IDS": "",
+            "DISALLOWED_ROLE_IDS": "111,222",
             "DEV_GUILD_ID": "123456789",
             "OPENAI_API_KEY": None,
             "OPENAI_MODEL": "gpt-5.2",
@@ -47,6 +48,7 @@ def test_settings_parse_dev_guild_id(tmp_path):
     )
 
     assert settings.dev_guild_id == 123456789
+    assert settings.disallowed_role_ids == {111, 222}
     assert settings.provider_request_timeout_seconds == 90.0
     assert settings.provider_max_retries == 2
     assert settings.provider_retry_backoff_seconds == 1.0
