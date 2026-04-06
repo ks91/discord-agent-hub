@@ -89,7 +89,7 @@ If you want slash commands to appear quickly during development, set:
 
 When this is set, commands are synced to that guild immediately instead of waiting for global command propagation.
 
-## Discord Flow
+## Discord Commands
 
 - `/agent-list`: shows available agents
 - `/agent-import`: imports an agent from a Markdown file with a ```agent block
@@ -98,17 +98,7 @@ When this is set, commands are synced to that guild immediately instead of waiti
 - `/chat [agent_id]`: creates a Discord thread and starts a session
 - Messages sent inside that thread are routed to the session's provider
 
-## Image Attachments
-
-Image attachments are currently supported for OpenAI, Anthropic, and Gemini chat agents.
-
-- Images are stored in local session history
-- Only image attachments are supported for now
-- When sending conversation history back to providers, only the most recent user image is re-sent
-
-This keeps research logs complete while avoiding oversized multimodal requests caused by repeatedly re-sending older images.
-
-### Minimal "Plain LLM" Chat
+## Minimal Plain LLM Chat
 
 The fastest way to start is:
 
@@ -127,6 +117,16 @@ You can also run `/hub-status` to confirm which providers are configured.
 
 Sample import-ready agent files are available under `examples/`.
 If an imported agent already exists, re-run `/agent-import` with `overwrite:true` to replace it.
+
+## Image Attachments
+
+Image attachments are currently supported for OpenAI, Anthropic, and Gemini chat agents.
+
+- Images are stored in local session history
+- Only image attachments are supported for now
+- When sending conversation history back to providers, only the most recent user image is re-sent
+
+This keeps research logs complete while avoiding oversized multimodal requests caused by repeatedly re-sending older images.
 
 ## Agent Management
 
