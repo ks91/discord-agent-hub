@@ -18,6 +18,9 @@ class Settings(BaseModel):
     anthropic_model: str = Field(default="claude-sonnet-4-0", alias="ANTHROPIC_MODEL")
     gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
     gemini_model: str = Field(default="gemini-2.5-pro", alias="GEMINI_MODEL")
+    provider_request_timeout_seconds: float = Field(default=90.0, alias="PROVIDER_REQUEST_TIMEOUT_SECONDS")
+    provider_max_retries: int = Field(default=2, alias="PROVIDER_MAX_RETRIES")
+    provider_retry_backoff_seconds: float = Field(default=1.0, alias="PROVIDER_RETRY_BACKOFF_SECONDS")
     data_dir: Path = Field(default=Path("./data"), alias="DATA_DIR")
     default_agent_id: str = Field(default="gpt-default", alias="DEFAULT_AGENT_ID")
     claude_code_command: str = Field(default="claude", alias="CLAUDE_CODE_COMMAND")
@@ -42,6 +45,9 @@ def load_settings() -> Settings:
         "ANTHROPIC_MODEL": os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-0"),
         "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY"),
         "GEMINI_MODEL": os.getenv("GEMINI_MODEL", "gemini-2.5-pro"),
+        "PROVIDER_REQUEST_TIMEOUT_SECONDS": os.getenv("PROVIDER_REQUEST_TIMEOUT_SECONDS", "90"),
+        "PROVIDER_MAX_RETRIES": os.getenv("PROVIDER_MAX_RETRIES", "2"),
+        "PROVIDER_RETRY_BACKOFF_SECONDS": os.getenv("PROVIDER_RETRY_BACKOFF_SECONDS", "1"),
         "DATA_DIR": os.getenv("DATA_DIR", "./data"),
         "DEFAULT_AGENT_ID": os.getenv("DEFAULT_AGENT_ID", "gpt-default"),
         "CLAUDE_CODE_COMMAND": os.getenv("CLAUDE_CODE_COMMAND", "claude"),

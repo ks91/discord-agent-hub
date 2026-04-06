@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 
 from discord_agent_hub.bot import _compact_conversation_for_provider, handle_user_message
@@ -29,6 +30,46 @@ class FailingProvider:
         raise RuntimeError("provider exploded")
 
 
+class SlowSequentialProvider:
+    def __init__(self) -> None:
+        self.calls = []
+
+    async def generate(self, *, agent, conversation, provider_session_id):
+        self.calls.append([item.content for item in conversation])
+        await asyncio.sleep(0.05)
+        return ProviderResponse(
+            output_text=f"reply {len(self.calls)}",
+            provider_session_id=provider_session_id,
+            raw_payload={"ok": True},
+        )
+
+
+class FlakyProvider:
+    def __init__(self, failures: int) -> None:
+        self.failures = failures
+        self.calls = 0
+
+    async def generate(self, *, agent, conversation, provider_session_id):
+        self.calls += 1
+        if self.calls <= self.failures:
+            raise RuntimeError("Anthropic API error 503: temporary upstream failure")
+        return ProviderResponse(
+            output_text="recovered reply",
+            provider_session_id=provider_session_id,
+            raw_payload={"ok": True},
+        )
+
+
+class HangingProvider:
+    async def generate(self, *, agent, conversation, provider_session_id):
+        await asyncio.sleep(0.05)
+        return ProviderResponse(
+            output_text="late reply",
+            provider_session_id=provider_session_id,
+            raw_payload={"ok": True},
+        )
+
+
 class FakeChannel:
     def __init__(self, channel_id: int) -> None:
         self.id = channel_id
@@ -49,6 +90,11 @@ def _build_fake_bot(tmp_path, provider_name: str, provider) -> SimpleNamespace:
         hub_store=hub_store,
         structured_logger=structured_logger,
         provider_registry=registry,
+        settings=SimpleNamespace(
+            provider_request_timeout_seconds=1.0,
+            provider_max_retries=2,
+            provider_retry_backoff_seconds=0.0,
+        ),
     )
 
 
@@ -119,6 +165,100 @@ async def test_handle_user_message_reports_provider_error(tmp_path):
     assert channel.sent_messages == ["Provider error: provider exploded"]
     event_log = (tmp_path / "events.jsonl").read_text(encoding="utf-8")
     assert "provider.error" in event_log
+
+
+async def test_handle_user_message_serializes_same_thread_requests(tmp_path):
+    provider = SlowSequentialProvider()
+    bot = _build_fake_bot(tmp_path, "openai_responses", provider)
+    session = bot.hub_store.create_session(
+        agent_id="gpt-default",
+        provider="openai_responses",
+        discord_channel_id=100,
+        discord_thread_id=200,
+        discord_guild_id=300,
+        created_by_user_id=400,
+    )
+    channel = FakeChannel(200)
+    first = SimpleNamespace(
+        author=SimpleNamespace(id=123, display_name="alice"),
+        content="first message",
+        channel=channel,
+    )
+    second = SimpleNamespace(
+        author=SimpleNamespace(id=124, display_name="bob"),
+        content="second message",
+        channel=channel,
+    )
+
+    await asyncio.gather(
+        handle_user_message(bot, first),
+        handle_user_message(bot, second),
+    )
+
+    assert provider.calls[0] == ["first message"]
+    assert provider.calls[1] == ["first message", "reply 1", "second message"]
+
+    messages = bot.hub_store.list_messages(session.id)
+    assert [item.content for item in messages] == [
+        "first message",
+        "reply 1",
+        "second message",
+        "reply 2",
+    ]
+
+    event_log = (tmp_path / "events.jsonl").read_text(encoding="utf-8")
+    assert "queue.wait_started" in event_log
+    assert "queue.wait_finished" in event_log
+
+
+async def test_handle_user_message_retries_retryable_provider_errors(tmp_path):
+    provider = FlakyProvider(failures=1)
+    bot = _build_fake_bot(tmp_path, "openai_responses", provider)
+    bot.hub_store.create_session(
+        agent_id="gpt-default",
+        provider="openai_responses",
+        discord_channel_id=100,
+        discord_thread_id=200,
+        discord_guild_id=300,
+        created_by_user_id=400,
+    )
+    channel = FakeChannel(200)
+    message = SimpleNamespace(
+        author=SimpleNamespace(id=123, display_name="alice"),
+        content="hello world",
+        channel=channel,
+    )
+
+    await handle_user_message(bot, message)
+
+    assert provider.calls == 2
+    assert channel.sent_messages == ["recovered reply"]
+    event_log = (tmp_path / "events.jsonl").read_text(encoding="utf-8")
+    assert "provider.retry" in event_log
+
+
+async def test_handle_user_message_reports_timeout_after_retry_budget(tmp_path):
+    bot = _build_fake_bot(tmp_path, "openai_responses", HangingProvider())
+    bot.settings.provider_request_timeout_seconds = 0.01
+    bot.settings.provider_max_retries = 0
+    bot.hub_store.create_session(
+        agent_id="gpt-default",
+        provider="openai_responses",
+        discord_channel_id=100,
+        discord_thread_id=200,
+        discord_guild_id=300,
+        created_by_user_id=400,
+    )
+    channel = FakeChannel(200)
+    message = SimpleNamespace(
+        author=SimpleNamespace(id=123, display_name="alice"),
+        content="hello world",
+        channel=channel,
+    )
+
+    await handle_user_message(bot, message)
+
+    assert channel.sent_messages == ["Provider error: Provider timed out after 0.01s"]
 
 
 def test_compact_conversation_keeps_only_latest_user_image():

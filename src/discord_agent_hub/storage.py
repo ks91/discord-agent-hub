@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -50,7 +52,7 @@ class AgentStore:
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
         if not self.path.exists():
-            self.path.write_text(json.dumps(DEFAULT_AGENTS, ensure_ascii=False, indent=2), encoding="utf-8")
+            self._write_json_atomic(DEFAULT_AGENTS)
 
     def list_agents(self) -> list[AgentDefinition]:
         raw = json.loads(self.path.read_text(encoding="utf-8"))
@@ -97,14 +99,28 @@ class AgentStore:
             raw[existing_index] = serialized
         else:
             raise KeyError(f"Agent already exists: {agent.id}")
-        self.path.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
+        self._write_json_atomic(raw)
 
     def delete_agent(self, agent_id: str) -> None:
         raw = json.loads(self.path.read_text(encoding="utf-8"))
         filtered = [item for item in raw if item["id"] != agent_id]
         if len(filtered) == len(raw):
             raise KeyError(f"Unknown agent_id: {agent_id}")
-        self.path.write_text(json.dumps(filtered, ensure_ascii=False, indent=2), encoding="utf-8")
+        self._write_json_atomic(filtered)
+
+    def _write_json_atomic(self, payload: list[dict]) -> None:
+        fd, temp_name = tempfile.mkstemp(
+            dir=str(self.path.parent),
+            prefix=f"{self.path.name}.",
+            suffix=".tmp",
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(payload, handle, ensure_ascii=False, indent=2)
+            os.replace(temp_name, self.path)
+        finally:
+            if os.path.exists(temp_name):
+                os.unlink(temp_name)
 
 
 class HubStore:
@@ -114,8 +130,11 @@ class HubStore:
         self._init_db()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=10.0)
         conn.row_factory = sqlite3.Row
+        conn.execute("pragma journal_mode=WAL")
+        conn.execute("pragma busy_timeout = 5000")
+        conn.execute("pragma synchronous = NORMAL")
         return conn
 
     def _init_db(self) -> None:

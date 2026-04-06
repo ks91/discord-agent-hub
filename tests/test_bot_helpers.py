@@ -36,6 +36,9 @@ def test_settings_parse_dev_guild_id(tmp_path):
             "ANTHROPIC_MODEL": "claude-sonnet-4-0",
             "GEMINI_API_KEY": None,
             "GEMINI_MODEL": "gemini-2.5-pro",
+            "PROVIDER_REQUEST_TIMEOUT_SECONDS": "90",
+            "PROVIDER_MAX_RETRIES": "2",
+            "PROVIDER_RETRY_BACKOFF_SECONDS": "1",
             "DATA_DIR": str(tmp_path / "data"),
             "DEFAULT_AGENT_ID": "gpt-default",
             "CLAUDE_CODE_COMMAND": "claude",
@@ -44,3 +47,6 @@ def test_settings_parse_dev_guild_id(tmp_path):
     )
 
     assert settings.dev_guild_id == 123456789
+    assert settings.provider_request_timeout_seconds == 90.0
+    assert settings.provider_max_retries == 2
+    assert settings.provider_retry_backoff_seconds == 1.0

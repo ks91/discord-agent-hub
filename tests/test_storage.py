@@ -88,3 +88,14 @@ def test_hub_store_persists_message_attachments(tmp_path):
             "data": "ZmFrZQ==",
         }
     ]
+
+
+def test_hub_store_enables_wal_and_busy_timeout(tmp_path):
+    store = HubStore(tmp_path / "hub.sqlite3")
+
+    with store._connect() as conn:
+        journal_mode = conn.execute("pragma journal_mode").fetchone()[0]
+        busy_timeout = conn.execute("pragma busy_timeout").fetchone()[0]
+
+    assert str(journal_mode).lower() == "wal"
+    assert busy_timeout == 5000

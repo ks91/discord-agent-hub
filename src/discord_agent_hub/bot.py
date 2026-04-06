@@ -1,15 +1,23 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 from dataclasses import replace
 import logging
 import mimetypes
+import time
 from typing import Iterable
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 from discord.ui import View
+import httpx
+
+try:
+    from openai import APIConnectionError, APITimeoutError, InternalServerError, RateLimitError
+except ImportError:  # pragma: no cover
+    APIConnectionError = APITimeoutError = InternalServerError = RateLimitError = tuple()  # type: ignore[assignment]
 
 from discord_agent_hub.agent_markdown import AgentMarkdownError, parse_agent_markdown
 from discord_agent_hub.config import Settings
@@ -100,6 +108,91 @@ async def _extract_supported_attachments(message: discord.Message) -> list[dict[
             }
         )
     return attachments
+
+
+def _thread_lock_for(bot, thread_id: int) -> asyncio.Lock:
+    locks = getattr(bot, "_thread_locks", None)
+    if locks is None:
+        locks = {}
+        setattr(bot, "_thread_locks", locks)
+    lock = locks.get(thread_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        locks[thread_id] = lock
+    return lock
+
+
+def _queue_depths_for(bot) -> dict[int, int]:
+    depths = getattr(bot, "_thread_queue_depths", None)
+    if depths is None:
+        depths = {}
+        setattr(bot, "_thread_queue_depths", depths)
+    return depths
+
+
+def _is_retryable_provider_error(exc: Exception) -> bool:
+    if isinstance(exc, (asyncio.TimeoutError, httpx.TimeoutException, httpx.TransportError)):
+        return True
+    openai_retryable = tuple(
+        cls for cls in (APIConnectionError, APITimeoutError, InternalServerError, RateLimitError)
+        if isinstance(cls, type)
+    )
+    if openai_retryable and isinstance(exc, openai_retryable):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code in {429, 502, 503, 504}
+    if isinstance(exc, RuntimeError):
+        text = str(exc)
+        return any(token in text for token in ("API error 429", "API error 502", "API error 503", "API error 504"))
+    return False
+
+
+async def _generate_with_retry(
+    *,
+    bot: DiscordAgentHub,
+    provider,
+    agent,
+    conversation: list[MessageRecord],
+    provider_session_id: str | None,
+    session_id: str,
+    provider_name: str,
+) -> object:
+    timeout_seconds = bot.settings.provider_request_timeout_seconds
+    max_retries = max(0, bot.settings.provider_max_retries)
+    base_backoff = max(0.0, bot.settings.provider_retry_backoff_seconds)
+
+    for attempt in range(max_retries + 1):
+        try:
+            return await asyncio.wait_for(
+                provider.generate(
+                    agent=agent,
+                    conversation=conversation,
+                    provider_session_id=provider_session_id,
+                ),
+                timeout=timeout_seconds,
+            )
+        except Exception as exc:
+            retryable = _is_retryable_provider_error(exc)
+            is_last_attempt = attempt >= max_retries
+            if retryable and not is_last_attempt:
+                delay_seconds = base_backoff * (2**attempt)
+                bot.structured_logger.append(
+                    "provider.retry",
+                    session_id=session_id,
+                    provider=provider_name,
+                    attempt=attempt + 1,
+                    next_attempt=attempt + 2,
+                    delay_seconds=delay_seconds,
+                    error=str(exc),
+                )
+                if delay_seconds:
+                    await asyncio.sleep(delay_seconds)
+                continue
+            if isinstance(exc, asyncio.TimeoutError):
+                raise RuntimeError(f"Provider timed out after {timeout_seconds:g}s") from exc
+            raise
+
+    raise RuntimeError("Provider request failed unexpectedly")
 
 
 def _compact_conversation_for_provider(conversation: list[MessageRecord]) -> list[MessageRecord]:
@@ -441,73 +534,108 @@ async def handle_user_message(bot: DiscordAgentHub, message: discord.Message) ->
     if session is None:
         return
 
-    agent = bot.agent_store.get_agent(session.agent_id)
-    provider = bot.provider_registry.get(session.provider)
-
-    try:
-        attachments = await _extract_supported_attachments(message)
-    except RuntimeError as exc:
-        await message.channel.send(f"Attachment error: {exc}")
-        return
-
-    user_record = MessageRecord(
-        session_id=session.id,
-        role="user",
-        author_id=message.author.id,
-        author_name=message.author.display_name,
-        content=message.content,
-        attachments=attachments,
-        created_at=utc_now(),
-    )
-    bot.hub_store.add_message(user_record)
-    bot.structured_logger.append(
-        "message.user",
-        session_id=session.id,
-        discord_thread_id=message.channel.id,
-        author_id=message.author.id,
-        author_name=message.author.display_name,
-        content=message.content,
-    )
-
-    conversation = _compact_conversation_for_provider(bot.hub_store.list_messages(session.id))
-    try:
-        response = await provider.generate(
-            agent=agent,
-            conversation=conversation,
-            provider_session_id=session.provider_session_id,
-        )
-    except Exception as exc:
-        logger.exception("Provider failed")
+    thread_id = message.channel.id
+    queue_depths = _queue_depths_for(bot)
+    queued_at = time.perf_counter()
+    queue_depths[thread_id] = queue_depths.get(thread_id, 0) + 1
+    queue_depth = queue_depths[thread_id]
+    if queue_depth > 1:
         bot.structured_logger.append(
-            "provider.error",
+            "queue.wait_started",
             session_id=session.id,
-            provider=session.provider,
-            error=str(exc),
+            discord_thread_id=thread_id,
+            queue_depth=queue_depth,
+            author_id=message.author.id,
         )
-        await message.channel.send(f"Provider error: {exc}")
-        return
 
-    if response.provider_session_id and response.provider_session_id != session.provider_session_id:
-        bot.hub_store.update_provider_session_id(session.id, response.provider_session_id)
+    try:
+        async with _thread_lock_for(bot, thread_id):
+            if queue_depth > 1:
+                bot.structured_logger.append(
+                    "queue.wait_finished",
+                    session_id=session.id,
+                    discord_thread_id=thread_id,
+                    queue_depth=queue_depth,
+                    author_id=message.author.id,
+                    waited_ms=int((time.perf_counter() - queued_at) * 1000),
+                )
+            agent = bot.agent_store.get_agent(session.agent_id)
+            provider = bot.provider_registry.get(session.provider)
 
-    assistant_record = MessageRecord(
-        session_id=session.id,
-        role="assistant",
-        author_id=None,
-        author_name=agent.name,
-        content=response.output_text,
-        created_at=utc_now(),
-    )
-    bot.hub_store.add_message(assistant_record)
-    bot.structured_logger.append(
-        "response.assistant",
-        session_id=session.id,
-        provider=session.provider,
-        agent_id=agent.id,
-        content=response.output_text,
-        raw_payload=response.raw_payload,
-    )
-    await _send_split(message.channel, response.output_text)
+            try:
+                attachments = await _extract_supported_attachments(message)
+            except RuntimeError as exc:
+                await message.channel.send(f"Attachment error: {exc}")
+                return
+
+            user_record = MessageRecord(
+                session_id=session.id,
+                role="user",
+                author_id=message.author.id,
+                author_name=message.author.display_name,
+                content=message.content,
+                attachments=attachments,
+                created_at=utc_now(),
+            )
+            bot.hub_store.add_message(user_record)
+            bot.structured_logger.append(
+                "message.user",
+                session_id=session.id,
+                discord_thread_id=message.channel.id,
+                author_id=message.author.id,
+                author_name=message.author.display_name,
+                content=message.content,
+            )
+
+            conversation = _compact_conversation_for_provider(bot.hub_store.list_messages(session.id))
+            try:
+                response = await _generate_with_retry(
+                    bot=bot,
+                    provider=provider,
+                    agent=agent,
+                    conversation=conversation,
+                    provider_session_id=session.provider_session_id,
+                    session_id=session.id,
+                    provider_name=session.provider,
+                )
+            except Exception as exc:
+                logger.exception("Provider failed")
+                bot.structured_logger.append(
+                    "provider.error",
+                    session_id=session.id,
+                    provider=session.provider,
+                    error=str(exc),
+                )
+                await message.channel.send(f"Provider error: {exc}")
+                return
+
+            if response.provider_session_id and response.provider_session_id != session.provider_session_id:
+                bot.hub_store.update_provider_session_id(session.id, response.provider_session_id)
+
+            assistant_record = MessageRecord(
+                session_id=session.id,
+                role="assistant",
+                author_id=None,
+                author_name=agent.name,
+                content=response.output_text,
+                created_at=utc_now(),
+            )
+            bot.hub_store.add_message(assistant_record)
+            bot.structured_logger.append(
+                "response.assistant",
+                session_id=session.id,
+                provider=session.provider,
+                agent_id=agent.id,
+                content=response.output_text,
+                raw_payload=response.raw_payload,
+            )
+            await _send_split(message.channel, response.output_text)
+    finally:
+        remaining = queue_depths.get(thread_id, 1) - 1
+        if remaining <= 0:
+            queue_depths.pop(thread_id, None)
+        else:
+            queue_depths[thread_id] = remaining
 
 
 def attach_message_handler(bot: DiscordAgentHub) -> None:
