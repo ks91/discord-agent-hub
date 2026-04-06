@@ -14,19 +14,20 @@ Goals:
 This initial implementation includes:
 
 - Provider-agnostic agent definitions
+- File-based agent management via `/agent-import`, `/agent-show`, and `/agent-delete`
 - Local persistence for sessions, messages, and event logs
 - An OpenAI Responses API provider
 - An Anthropic Messages API provider
 - A Gemini API provider
+- Optional provider-side tools for web search and code execution
 - Image attachments for OpenAI, Anthropic, and Gemini
 - Text extraction for `.txt`, `.md`, `.csv`, `.pdf`, `.docx`, `.pptx`, and `.xlsx`
 - A minimal Discord bot that binds one session to one Discord thread
 
 This is still missing or intentionally simplified:
 
-- Agent management UI
+- Richer agent management UI beyond import/show/delete
 - A `loglm` importer implementation
-- Optional cloud-side tools such as web search and code execution
 - Embedded-image extraction from uploaded documents
 
 ## Layout
