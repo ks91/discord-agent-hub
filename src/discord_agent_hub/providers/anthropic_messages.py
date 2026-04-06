@@ -133,9 +133,15 @@ class AnthropicMessagesProvider(Provider):
     @staticmethod
     def _extract_usage(body: dict[str, Any]) -> dict[str, Any]:
         usage = body.get("usage") or {}
+        input_tokens = usage.get("input_tokens")
+        output_tokens = usage.get("output_tokens")
+        total_tokens = None
+        if isinstance(input_tokens, int) and isinstance(output_tokens, int):
+            total_tokens = input_tokens + output_tokens
         return {
-            "input_tokens": usage.get("input_tokens"),
-            "output_tokens": usage.get("output_tokens"),
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": total_tokens,
             "cache_creation_input_tokens": usage.get("cache_creation_input_tokens"),
             "cache_read_input_tokens": usage.get("cache_read_input_tokens"),
         }

@@ -78,8 +78,50 @@ async def test_anthropic_provider_maps_conversation_and_extracts_text():
     assert response.usage == {
         "input_tokens": None,
         "output_tokens": None,
+        "total_tokens": None,
         "cache_creation_input_tokens": None,
         "cache_read_input_tokens": None,
+    }
+
+
+async def test_anthropic_provider_computes_total_tokens_from_input_and_output():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "content": [{"type": "text", "text": "done"}],
+                "usage": {
+                    "input_tokens": 123,
+                    "output_tokens": 45,
+                    "cache_creation_input_tokens": 10,
+                    "cache_read_input_tokens": 20,
+                },
+            },
+        )
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://api.anthropic.com",
+    )
+    provider = AnthropicMessagesProvider(
+        api_key="test-key",
+        default_model="claude-sonnet-4-0",
+        http_client=client,
+    )
+    agent = AgentDefinition(
+        id="claude-default",
+        name="Claude Default",
+        provider=ProviderKind.ANTHROPIC_MESSAGES,
+    )
+
+    response = await provider.generate(agent=agent, conversation=[], provider_session_id=None)
+
+    assert response.usage == {
+        "input_tokens": 123,
+        "output_tokens": 45,
+        "total_tokens": 168,
+        "cache_creation_input_tokens": 10,
+        "cache_read_input_tokens": 20,
     }
 
 
