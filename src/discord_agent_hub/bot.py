@@ -64,6 +64,7 @@ class DiscordAgentHub(commands.Bot):
         self.tree.add_command(chat)
         self.tree.add_command(session_show)
         self.tree.add_command(log_export)
+        self.tree.add_command(usage_report)
         if self.settings.dev_guild_id:
             guild = discord.Object(id=self.settings.dev_guild_id)
             self.tree.copy_global_to(guild=guild)
@@ -300,6 +301,50 @@ def _summarize_usage(events: list[dict]) -> dict[str, int]:
             if isinstance(value, int):
                 totals[key] += value
     return totals
+
+
+def _usage_report_lines(events: list[dict], *, guild_id: int | None = None) -> list[str]:
+    filtered = [
+        event
+        for event in events
+        if event.get("event") == "response.assistant"
+        and (guild_id is None or event.get("discord_guild_id") == guild_id)
+    ]
+    if not filtered:
+        return ["No usage recorded yet."]
+
+    totals = _summarize_usage(filtered)
+    by_provider: dict[str, int] = {}
+    by_agent: dict[str, int] = {}
+    by_user: dict[str, int] = {}
+
+    for event in filtered:
+        provider = event.get("provider") or "unknown"
+        agent_id = event.get("agent_id") or "unknown"
+        user_id = str(event.get("created_by_user_id") or event.get("user_id") or "unknown")
+        by_provider[provider] = by_provider.get(provider, 0) + 1
+        by_agent[agent_id] = by_agent.get(agent_id, 0) + 1
+        by_user[user_id] = by_user.get(user_id, 0) + 1
+
+    def top_lines(title: str, values: dict[str, int]) -> list[str]:
+        lines = [title]
+        for key, count in sorted(values.items(), key=lambda item: (-item[1], item[0]))[:5]:
+            lines.append(f"- `{key}`: {count}")
+        return lines
+
+    lines = [
+        f"Responses: `{len(filtered)}`",
+        f"Input tokens: `{totals['input_tokens']}`",
+        f"Output tokens: `{totals['output_tokens']}`",
+        f"Total tokens: `{totals['total_tokens']}`",
+        "",
+    ]
+    lines.extend(top_lines("Top providers", by_provider))
+    lines.append("")
+    lines.extend(top_lines("Top agents", by_agent))
+    lines.append("")
+    lines.extend(top_lines("Top user IDs", by_user))
+    return lines
 
 
 def _build_transcript_markdown(*, session, agent, messages: list[MessageRecord], usage: dict[str, int]) -> str:
@@ -613,6 +658,19 @@ async def log_export(interaction: discord.Interaction) -> None:
     await interaction.response.send_message("Session export", files=files, ephemeral=True)
 
 
+@app_commands.command(name="usage-report", description="Show a lightweight usage summary for this server")
+async def usage_report(interaction: discord.Interaction) -> None:
+    bot = interaction.client
+    assert isinstance(bot, DiscordAgentHub)
+    if not bot.guild_allowed(interaction.guild):
+        await interaction.response.send_message("This server is not allowed.", ephemeral=True)
+        return
+
+    events = bot.structured_logger.list_events()
+    lines = _usage_report_lines(events, guild_id=interaction.guild_id)
+    await interaction.response.send_message("\n".join(lines), ephemeral=True)
+
+
 @app_commands.command(name="chat", description="Create a thread-bound chat session")
 @app_commands.describe(agent_id="Agent ID to use")
 async def chat(interaction: discord.Interaction, agent_id: str | None = None) -> None:
@@ -805,6 +863,8 @@ async def handle_user_message(bot: DiscordAgentHub, message: discord.Message) ->
                 session_id=session.id,
                 provider=session.provider,
                 agent_id=agent.id,
+                discord_guild_id=session.discord_guild_id,
+                created_by_user_id=session.created_by_user_id,
                 content=response.output_text,
                 usage=response.usage,
                 raw_payload=response.raw_payload,

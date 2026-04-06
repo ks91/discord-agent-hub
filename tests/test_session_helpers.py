@@ -1,4 +1,4 @@
-from discord_agent_hub.bot import _build_transcript_markdown, _summarize_usage
+from discord_agent_hub.bot import _build_transcript_markdown, _summarize_usage, _usage_report_lines
 from discord_agent_hub.models import AgentDefinition, MessageRecord, ProviderKind, SessionRecord
 
 
@@ -64,3 +64,42 @@ def test_build_transcript_markdown_includes_metadata_and_messages():
     assert "agent_name: GPT Default" in markdown
     assert "alice: hello" in markdown
     assert "GPT Default: hi" in markdown
+
+
+def test_usage_report_lines_aggregate_top_counts():
+    lines = _usage_report_lines(
+        [
+            {
+                "event": "response.assistant",
+                "provider": "openai_responses",
+                "agent_id": "gpt-default",
+                "created_by_user_id": 1,
+                "discord_guild_id": 100,
+                "usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+            },
+            {
+                "event": "response.assistant",
+                "provider": "anthropic_messages",
+                "agent_id": "claude-default",
+                "created_by_user_id": 2,
+                "discord_guild_id": 100,
+                "usage": {"input_tokens": 8, "output_tokens": 4, "total_tokens": 12},
+            },
+            {
+                "event": "response.assistant",
+                "provider": "openai_responses",
+                "agent_id": "gpt-default",
+                "created_by_user_id": 1,
+                "discord_guild_id": 100,
+                "usage": {"input_tokens": 7, "output_tokens": 3, "total_tokens": 10},
+            },
+        ],
+        guild_id=100,
+    )
+
+    payload = "\n".join(lines)
+    assert "Responses: `3`" in payload
+    assert "Input tokens: `25`" in payload
+    assert "- `openai_responses`: 2" in payload
+    assert "- `gpt-default`: 2" in payload
+    assert "- `1`: 2" in payload

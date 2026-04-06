@@ -22,6 +22,8 @@ This initial implementation includes:
 - Optional provider-side tools for web search and code execution
 - Image attachments for OpenAI, Anthropic, and Gemini
 - Text extraction for `.txt`, `.md`, `.csv`, `.pdf`, `.docx`, `.pptx`, and `.xlsx`
+- Per-request timeout and limited retry handling for provider calls
+- Role-based access restrictions for token-consuming actions
 - A minimal Discord bot that binds one session to one Discord thread
 
 This is still missing or intentionally simplified:
@@ -67,6 +69,10 @@ Events are written to `data/events.jsonl` as one JSON object per line. Current e
 - `message.user`
 - `response.assistant`
 - `provider.error`
+- `provider.retry`
+- `queue.wait_started`
+- `queue.wait_finished`
+- `auth.denied_role`
 
 The intended design is:
 
@@ -84,6 +90,8 @@ That is easier to maintain than forcing the bot to mimic raw `loglm` terminal lo
 5. Fill in your Discord and provider credentials
 6. Run `python -m discord_agent_hub.main`
 
+If you update dependencies later, re-run `pip install -e .` inside the same virtual environment.
+
 ### Fast Dev Setup
 
 If you want slash commands to appear quickly during development, set:
@@ -98,8 +106,30 @@ When this is set, commands are synced to that guild immediately instead of waiti
 - `/agent-import`: imports an agent from a Markdown file with a ```agent block
 - `/agent-show`: shows the imported agent definition
 - `/agent-delete`: deletes an agent definition after confirmation
+- `/session-show`: shows the current thread's session metadata and token totals
+- `/log-export`: exports the current session transcript and JSONL events
+- `/usage-report`: shows a lightweight usage summary for the current server
 - `/chat [agent_id]`: creates a Discord thread and starts a session
 - Messages sent inside that thread are routed to the session's provider
+
+## Environment Notes
+
+Useful optional settings include:
+
+- `DEV_GUILD_ID`: use guild-scoped command sync during development
+- `PROVIDER_REQUEST_TIMEOUT_SECONDS`: hard timeout for one provider call
+- `PROVIDER_MAX_RETRIES`: retry budget for transient provider failures
+- `PROVIDER_RETRY_BACKOFF_SECONDS`: base backoff between retries
+- `DISALLOWED_ROLE_IDS`: comma-separated Discord role IDs that may not start or use AI chat
+
+`DISALLOWED_ROLE_IDS` is checked both when starting `/chat` and when sending messages inside an existing session thread.
+
+To get a role ID in Discord:
+
+1. Enable `Developer Mode` in Discord settings
+2. Open `Server Settings` -> `Roles`
+3. Right-click the target role
+4. Choose `Copy Role ID`
 
 ## Minimal Plain LLM Chat
 
@@ -117,6 +147,7 @@ The fastest way to start is:
 6. Send messages inside the created thread
 
 You can also run `/hub-status` to confirm which providers are configured.
+Inside a session thread, you can run `/session-show` to inspect the current binding and `/log-export` to download the transcript and raw JSONL events.
 
 Sample import-ready agent files are available under `examples/`.
 If an imported agent already exists, re-run `/agent-import` with `overwrite:true` to replace it.
@@ -152,6 +183,59 @@ The current agent workflow is:
 - Delete: use `/agent-delete`
 
 This keeps agent definitions file-based and versionable, which fits long instruction prompts better than trying to manage everything through short slash-command arguments.
+
+The import format also supports:
+
+- `public_instructions: false` to hide the instructions preview in `/agent-show`
+- `tools.web_search: true|false`
+- `tools.code_execution: true|false`
+
+This is useful for quizzes, simulations, or puzzle agents where users should not see the full hidden instructions.
+
+A minimal importable example looks like this:
+
+````md
+# Mystery Agent
+
+```agent
+id: mystery-agent
+name: Mystery Agent
+provider: openai_responses
+model: gpt-5.2
+description: A quiz-style agent with hidden instructions
+public_instructions: false
+tools:
+  web_search: false
+  code_execution: false
+```
+
+You are running a puzzle game for students.
+
+Do not reveal hidden rules unless the game is over.
+````
+
+## Concurrency Notes
+
+The hub currently assumes a single bot process.
+
+- Messages in the same Discord thread are serialized before provider calls
+- Different threads can still progress concurrently
+- `agents.json` updates are serialized inside the process
+- SQLite runs with `WAL` and `busy_timeout`
+
+This is enough for one-process operation on a single VM, but it is not yet a distributed or multi-process design.
+
+## Usage Reporting
+
+`/usage-report` provides a lightweight per-server summary based on structured log events.
+
+- Total assistant responses
+- Aggregated input/output/total tokens when providers expose usage
+- Top providers
+- Top agents
+- Top user IDs
+
+This is intended as a simple operational view for classes, workshops, or camps rather than a full billing system.
 
 ## Roadmap
 
