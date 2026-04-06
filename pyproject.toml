@@ -7,7 +7,11 @@ name = "discord-agent-hub"
 version = "0.1.0"
 description = "Multi-user Discord hub for OpenAI, Claude Code, and Gemini agents"
 readme = "README.md"
+license = "GPL-3.0-or-later"
 requires-python = ">=3.10"
+authors = [
+  {name = "Kenji Saito", email = "ks91@sfc.wide.ad.jp"},
+]
 dependencies = [
   "discord.py==2.7.1",
   "openai==1.109.1",

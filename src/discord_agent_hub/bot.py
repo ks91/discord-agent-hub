@@ -21,6 +21,7 @@ try:
 except ImportError:  # pragma: no cover
     APIConnectionError = APITimeoutError = InternalServerError = RateLimitError = tuple()  # type: ignore[assignment]
 
+from discord_agent_hub import __version__
 from discord_agent_hub.agent_markdown import AgentMarkdownError, parse_agent_markdown
 from discord_agent_hub.conversation_render import render_message_text
 from discord_agent_hub.config import Settings
@@ -588,6 +589,7 @@ async def hub_status(interaction: discord.Interaction) -> None:
 
     settings = bot.settings
     lines = [
+        f"Version: `{__version__}`",
         f"Default agent: `{settings.default_agent_id}`",
         f"OpenAI configured: `{'yes' if bool(settings.openai_api_key) else 'no'}`",
         f"Anthropic configured: `{'yes' if bool(settings.anthropic_api_key) else 'no'}`",

@@ -2,6 +2,8 @@
 
 A new foundation for running shared AI agents for multiple users on Discord.
 
+Current version: `0.1.0`
+
 Goals:
 
 - Use the current OpenAI, Anthropic, and Gemini APIs
@@ -31,6 +33,11 @@ This is still missing or intentionally simplified:
 - Richer agent management UI beyond import/show/delete
 - A `loglm` importer implementation
 - Embedded-image extraction from uploaded documents
+
+## License
+
+`discord-agent-hub` is released under `GPL-3.0-or-later`.
+See [LICENSE](/Volumes/ks91home/ks91/Programs/discord-agent-hub/LICENSE) and [AUTHORS](/Volumes/ks91home/ks91/Programs/discord-agent-hub/AUTHORS).
 
 ## Layout
 

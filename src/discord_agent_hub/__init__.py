@@ -1,3 +1,5 @@
+__version__ = "0.1.0"
+
 __all__ = [
     "bot",
     "config",
@@ -5,4 +7,5 @@ __all__ = [
     "providers",
     "storage",
     "structured_log",
+    "__version__",
 ]
