@@ -127,9 +127,12 @@ Useful optional settings include:
 - `PROVIDER_REQUEST_TIMEOUT_SECONDS`: hard timeout for one provider call
 - `PROVIDER_MAX_RETRIES`: retry budget for transient provider failures
 - `PROVIDER_RETRY_BACKOFF_SECONDS`: base backoff between retries
+- `DATA_DIR`: runtime state directory for `agents.json`, `hub.sqlite3`, and `events.jsonl`
 - `DISALLOWED_ROLE_IDS`: comma-separated Discord role IDs that may not start or use AI chat
 
 `DISALLOWED_ROLE_IDS` is checked both when starting `/chat` and when sending messages inside an existing session thread.
+
+If you run multiple hub instances on the same machine, set `DATA_DIR` explicitly to a different absolute path for each instance. Relying on the default `./data` can cause two instances to share the same runtime state if they start with the same working directory.
 
 To get a role ID in Discord:
 
