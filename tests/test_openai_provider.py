@@ -173,3 +173,41 @@ async def test_openai_provider_omits_empty_text_when_image_only():
             "detail": "auto",
         }
     ]
+
+
+async def test_openai_provider_renders_document_attachments_as_text():
+    provider = OpenAIResponsesProvider(api_key="test-key", default_model="gpt-5.2")
+    provider.client = FakeOpenAIClient()
+    agent = AgentDefinition(
+        id="gpt-default",
+        name="GPT Default",
+        provider=ProviderKind.OPENAI_RESPONSES,
+    )
+    conversation = [
+        MessageRecord(
+            session_id="s1",
+            role="user",
+            author_id=1,
+            author_name="alice",
+            content="Summarize this document",
+            attachments=[
+                {
+                    "type": "document",
+                    "filename": "notes.md",
+                    "media_type": "text/markdown",
+                    "text": "# Heading\n\nBody text.",
+                }
+            ],
+            created_at="2026-04-06T00:00:00+00:00",
+        )
+    ]
+
+    await provider.generate(agent=agent, conversation=conversation, provider_session_id=None)
+
+    call = provider.client.responses.calls[0]
+    assert call["input"][0]["content"] == [
+        {
+            "type": "input_text",
+            "text": "alice: Summarize this document\n\n[Attached document: notes.md]\n# Heading\n\nBody text.",
+        }
+    ]

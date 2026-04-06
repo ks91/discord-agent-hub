@@ -13,6 +13,7 @@ from discord.ui import View
 
 from discord_agent_hub.agent_markdown import AgentMarkdownError, parse_agent_markdown
 from discord_agent_hub.config import Settings
+from discord_agent_hub.document_extract import DocumentExtractionError, extract_document_text, is_supported_document
 from discord_agent_hub.models import MessageRecord, utc_now
 from discord_agent_hub.providers.base import ProviderRegistry
 from discord_agent_hub.storage import AgentStore, HubStore
@@ -69,19 +70,33 @@ async def _send_split(thread: discord.Thread, content: str) -> None:
         await thread.send(chunk)
 
 
-async def _extract_image_attachments(message: discord.Message) -> list[dict[str, str]]:
+async def _extract_supported_attachments(message: discord.Message) -> list[dict[str, str]]:
     attachments = []
     for attachment in getattr(message, "attachments", []):
         content_type = attachment.content_type or mimetypes.guess_type(attachment.filename)[0]
-        if not content_type or not content_type.startswith("image/"):
-            continue
         raw = await attachment.read()
+        if content_type and content_type.startswith("image/"):
+            attachments.append(
+                {
+                    "type": "image",
+                    "filename": attachment.filename,
+                    "media_type": content_type,
+                    "data": base64.b64encode(raw).decode("ascii"),
+                }
+            )
+            continue
+        if not is_supported_document(attachment.filename):
+            continue
+        try:
+            extracted_text = extract_document_text(filename=attachment.filename, raw=raw)
+        except DocumentExtractionError as exc:
+            raise RuntimeError(f"{attachment.filename}: {exc}") from exc
         attachments.append(
             {
-                "type": "image",
+                "type": "document",
                 "filename": attachment.filename,
-                "media_type": content_type,
-                "data": base64.b64encode(raw).decode("ascii"),
+                "media_type": content_type or "application/octet-stream",
+                "text": extracted_text,
             }
         )
     return attachments
@@ -95,13 +110,19 @@ def _compact_conversation_for_provider(conversation: list[MessageRecord]) -> lis
 
     compacted = []
     for index, item in enumerate(conversation):
+        if not item.attachments:
+            compacted.append(item)
+            continue
+
         if index == latest_user_image_index:
             compacted.append(item)
             continue
-        if item.attachments:
-            compacted.append(replace(item, attachments=[]))
-        else:
+
+        filtered = [attachment for attachment in item.attachments if attachment.get("type") != "image"]
+        if filtered == item.attachments:
             compacted.append(item)
+            continue
+        compacted.append(replace(item, attachments=filtered))
     return compacted
 
 
@@ -423,13 +444,19 @@ async def handle_user_message(bot: DiscordAgentHub, message: discord.Message) ->
     agent = bot.agent_store.get_agent(session.agent_id)
     provider = bot.provider_registry.get(session.provider)
 
+    try:
+        attachments = await _extract_supported_attachments(message)
+    except RuntimeError as exc:
+        await message.channel.send(f"Attachment error: {exc}")
+        return
+
     user_record = MessageRecord(
         session_id=session.id,
         role="user",
         author_id=message.author.id,
         author_name=message.author.display_name,
         content=message.content,
-        attachments=await _extract_image_attachments(message),
+        attachments=attachments,
         created_at=utc_now(),
     )
     bot.hub_store.add_message(user_record)

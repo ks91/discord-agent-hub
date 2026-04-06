@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from openai import AsyncOpenAI
 
+from discord_agent_hub.conversation_render import render_message_text
 from discord_agent_hub.models import AgentDefinition, MessageRecord, ProviderResponse
 from discord_agent_hub.providers.base import Provider
 
@@ -33,9 +34,7 @@ class OpenAIResponsesProvider(Provider):
                     f"data:{attachment['media_type']};base64,{attachment['data']}"
                 )
                 content.append({"type": "input_image", "image_url": data_url, "detail": "auto"})
-            text = item.content.strip()
-            if text and item.author_name:
-                text = f"{item.author_name}: {text}"
+            text = render_message_text(item)
             if text.strip() or not content:
                 content.append({"type": content_type, "text": text})
             input_items.append(

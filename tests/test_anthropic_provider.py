@@ -237,3 +237,53 @@ async def test_anthropic_provider_omits_empty_text_when_image_only():
             },
         }
     ]
+
+
+async def test_anthropic_provider_renders_document_attachments_as_text():
+    captured = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured["json"] = json.loads(request.content.decode("utf-8"))
+        return httpx.Response(200, json={"content": [{"type": "text", "text": "done"}]})
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://api.anthropic.com",
+    )
+    provider = AnthropicMessagesProvider(
+        api_key="test-key",
+        default_model="claude-sonnet-4-0",
+        http_client=client,
+    )
+    agent = AgentDefinition(
+        id="claude-default",
+        name="Claude Default",
+        provider=ProviderKind.ANTHROPIC_MESSAGES,
+    )
+    conversation = [
+        MessageRecord(
+            session_id="s1",
+            role="user",
+            author_id=1,
+            author_name="alice",
+            content="Summarize this document",
+            attachments=[
+                {
+                    "type": "document",
+                    "filename": "notes.md",
+                    "media_type": "text/markdown",
+                    "text": "# Heading\n\nBody text.",
+                }
+            ],
+            created_at="2026-04-06T00:00:00+00:00",
+        )
+    ]
+
+    await provider.generate(agent=agent, conversation=conversation, provider_session_id=None)
+
+    assert captured["json"]["messages"][0]["content"] == [
+        {
+            "type": "text",
+            "text": "alice: Summarize this document\n\n[Attached document: notes.md]\n# Heading\n\nBody text.",
+        }
+    ]

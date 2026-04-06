@@ -235,3 +235,55 @@ async def test_gemini_provider_omits_empty_text_when_image_only():
             }
         }
     ]
+
+
+async def test_gemini_provider_renders_document_attachments_as_text():
+    captured = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured["json"] = json.loads(request.content.decode("utf-8"))
+        return httpx.Response(
+            200,
+            json={"candidates": [{"content": {"parts": [{"text": "done"}]}}]},
+        )
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://generativelanguage.googleapis.com",
+    )
+    provider = GeminiAPIProvider(
+        api_key="gemini-key",
+        default_model="gemini-2.5-pro",
+        http_client=client,
+    )
+    agent = AgentDefinition(
+        id="gemini-default",
+        name="Gemini Default",
+        provider=ProviderKind.GEMINI_API,
+    )
+    conversation = [
+        MessageRecord(
+            session_id="s1",
+            role="user",
+            author_id=1,
+            author_name="alice",
+            content="Summarize this spreadsheet",
+            attachments=[
+                {
+                    "type": "document",
+                    "filename": "table.csv",
+                    "media_type": "text/csv",
+                    "text": "name,score\nalice,42",
+                }
+            ],
+            created_at="2026-04-06T00:00:00+00:00",
+        )
+    ]
+
+    await provider.generate(agent=agent, conversation=conversation, provider_session_id=None)
+
+    assert captured["json"]["contents"][0]["parts"] == [
+        {
+            "text": "alice: Summarize this spreadsheet\n\n[Attached document: table.csv]\nname,score\nalice,42",
+        }
+    ]

@@ -155,3 +155,36 @@ def test_compact_conversation_keeps_only_latest_user_image():
 
     assert compacted[0].attachments == []
     assert compacted[2].attachments == [{"type": "image", "data": "second"}]
+
+
+def test_compact_conversation_keeps_document_attachments_while_dropping_old_images():
+    conversation = [
+        MessageRecord(
+            session_id="s1",
+            role="user",
+            author_id=1,
+            author_name="alice",
+            content="see image and document",
+            created_at="2026-04-06T00:00:00+00:00",
+            attachments=[
+                {"type": "image", "data": "first"},
+                {"type": "document", "filename": "notes.txt", "text": "first doc"},
+            ],
+        ),
+        MessageRecord(
+            session_id="s1",
+            role="user",
+            author_id=1,
+            author_name="alice",
+            content="new image",
+            created_at="2026-04-06T00:00:01+00:00",
+            attachments=[{"type": "image", "data": "second"}],
+        ),
+    ]
+
+    compacted = _compact_conversation_for_provider(conversation)
+
+    assert compacted[0].attachments == [
+        {"type": "document", "filename": "notes.txt", "text": "first doc"}
+    ]
+    assert compacted[1].attachments == [{"type": "image", "data": "second"}]

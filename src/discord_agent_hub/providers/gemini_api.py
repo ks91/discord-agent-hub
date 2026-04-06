@@ -4,6 +4,7 @@ from typing import Any
 
 import httpx
 
+from discord_agent_hub.conversation_render import render_message_text
 from discord_agent_hub.models import AgentDefinition, MessageRecord, ProviderResponse
 from discord_agent_hub.providers.base import Provider
 
@@ -50,9 +51,7 @@ class GeminiAPIProvider(Provider):
                         }
                     }
                 )
-            text = item.content.strip()
-            if text and item.author_name:
-                text = f"{item.author_name}: {text}"
+            text = render_message_text(item)
             if text.strip() or not parts:
                 parts.append({"text": text})
             contents.append(

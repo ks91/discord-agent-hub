@@ -18,14 +18,16 @@ This initial implementation includes:
 - An OpenAI Responses API provider
 - An Anthropic Messages API provider
 - A Gemini API provider
+- Image attachments for OpenAI, Anthropic, and Gemini
+- Text extraction for `.txt`, `.md`, `.csv`, `.pdf`, `.docx`, `.pptx`, and `.xlsx`
 - A minimal Discord bot that binds one session to one Discord thread
 
 This is still missing or intentionally simplified:
 
-- Attachment handling
 - Agent management UI
 - A `loglm` importer implementation
 - Optional cloud-side tools such as web search and code execution
+- Embedded-image extraction from uploaded documents
 
 ## Layout
 
@@ -128,6 +130,17 @@ Image attachments are currently supported for OpenAI, Anthropic, and Gemini chat
 
 This keeps research logs complete while avoiding oversized multimodal requests caused by repeatedly re-sending older images.
 
+## Document Attachments
+
+Uploaded documents are currently converted to text inside the hub and then sent to the selected provider as text context.
+
+- Supported formats: `.txt`, `.md`, `.csv`, `.pdf`, `.docx`, `.pptx`, `.xlsx`
+- Document text is stored in local session history
+- Images embedded inside documents are not extracted yet
+- Older document attachments remain in conversation history; only old image attachments are compacted
+
+This keeps the implementation provider-agnostic while already supporting common workflows such as summarizing papers, notes, slides, and spreadsheets.
+
 ## Agent Management
 
 The current agent workflow is:
@@ -142,6 +155,6 @@ This keeps agent definitions file-based and versionable, which fits long instruc
 ## Roadmap
 
 - Add optional provider-side tools such as web search and code execution
-- Add attachments and tool handling for OpenAI
+- Improve attachment handling for larger files and richer document parsing
 - Move agent definitions from JSON-only management toward DB-backed management
 - Add a `loglm` importer in `loglm` or a companion repository
