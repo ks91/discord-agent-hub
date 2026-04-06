@@ -72,7 +72,7 @@ async def test_anthropic_provider_maps_conversation_and_extracts_text():
     assert captured["json"]["system"] == "Be precise."
     assert captured["json"]["messages"] == [
         {"role": "user", "content": [{"type": "text", "text": "alice: Hello"}]},
-        {"role": "assistant", "content": [{"type": "text", "text": "Claude Default: Hi there"}]},
+        {"role": "assistant", "content": [{"type": "text", "text": "Hi there"}]},
     ]
     assert response.output_text == "First line.\nSecond line."
     assert response.usage == {

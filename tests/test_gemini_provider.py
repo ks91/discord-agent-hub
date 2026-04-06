@@ -68,7 +68,7 @@ async def test_gemini_provider_maps_conversation_and_extracts_text():
     }
     assert captured["json"]["contents"] == [
         {"role": "user", "parts": [{"text": "alice: Hello"}]},
-        {"role": "model", "parts": [{"text": "Gemini Default: Hi"}]},
+        {"role": "model", "parts": [{"text": "Hi"}]},
     ]
     assert response.output_text == "First answer.\nSecond answer."
     assert response.usage == {

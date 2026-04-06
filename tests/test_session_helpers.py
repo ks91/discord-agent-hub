@@ -70,7 +70,8 @@ def test_build_transcript_markdown_includes_metadata_and_messages():
     assert "session_id: `s1`" in markdown
     assert "agent_name: GPT Default" in markdown
     assert "alice: hello" in markdown
-    assert "GPT Default: hi" in markdown
+    assert "### GPT Default (assistant)" in markdown
+    assert "\nhi\n" in markdown
 
 
 def test_usage_report_lines_aggregate_top_counts():

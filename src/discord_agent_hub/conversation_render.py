@@ -9,7 +9,7 @@ MAX_DOCUMENT_TEXT_CHARS = 12000
 def render_message_text(item: MessageRecord) -> str:
     segments: list[str] = []
     text = item.content.strip()
-    if text and item.author_name:
+    if item.role == "user" and text and item.author_name:
         text = f"{item.author_name}: {text}"
     if text:
         segments.append(text)

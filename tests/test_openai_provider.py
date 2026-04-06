@@ -66,7 +66,7 @@ async def test_openai_provider_uses_input_text_for_user_and_output_text_for_assi
         },
         {
             "role": "assistant",
-            "content": [{"type": "output_text", "text": "GPT Default: Hi there"}],
+            "content": [{"type": "output_text", "text": "Hi there"}],
         },
     ]
     assert response.output_text == "reply"
