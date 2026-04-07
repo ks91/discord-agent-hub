@@ -9,5 +9,6 @@ __pycache__/
 data/
 logs/
 run/
+unadded/
 
 .loglm_agent
