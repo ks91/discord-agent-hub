@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "discord-agent-hub"
-version = "0.1.3-dev"
+version = "0.1.3"
 description = "Multi-user Discord hub for OpenAI, Claude Code, and Gemini agents"
 readme = "README.md"
 license = "GPL-3.0-or-later"
