@@ -2,7 +2,7 @@
 
 A new foundation for running shared AI agents for multiple users on Discord.
 
-Current version: `0.1.3`
+Current version: `0.1.4-dev`
 
 Goals:
 
