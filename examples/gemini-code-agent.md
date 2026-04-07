@@ -6,7 +6,7 @@ This example enables Gemini code execution for calculation-heavy or data-oriente
 id: gemini-code-agent
 name: Gemini Code Agent
 provider: gemini_api
-model: gemini-2.5-pro
+model: gemini-3.1-pro-preview
 description: Gemini agent with code execution enabled
 enabled: true
 tools:

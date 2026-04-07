@@ -4,7 +4,7 @@
 id: the-interpreter-gpt-agent
 name: The Interpreter
 provider: openai_responses
-model: gpt-5.2
+model: gpt-5.4
 description: Automatic translation of messages into other languages being used
 enabled: true
 tools:

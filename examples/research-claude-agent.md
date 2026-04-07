@@ -6,7 +6,7 @@ This example enables web search for research-style conversations.
 id: research-claude-agent
 name: Research Claude Agent
 provider: anthropic_messages
-model: claude-sonnet-4-0
+model: claude-sonnet-4-6
 description: Research-oriented Claude agent with web search enabled
 enabled: true
 tools:
