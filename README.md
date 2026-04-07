@@ -136,6 +136,11 @@ When this is set, commands are synced to that guild immediately instead of waiti
 - `/chat [agent_id]`: creates a Discord thread and starts a session
 - Messages sent inside that thread are routed to the session's provider
 
+For exported event logs, you can render JSONL into a more readable Markdown timeline with:
+
+- `scripts/render-events-md.py path/to/events.jsonl`
+- `scripts/render-events-md.py path/to/events.jsonl output.md`
+
 ## Environment Notes
 
 Useful optional settings include:
