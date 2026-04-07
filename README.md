@@ -114,6 +114,7 @@ By default this script uses:
 - `./logs/hub.log`
 
 You can override them with `HUB_PYTHON_BIN`, `HUB_PID_FILE`, and `HUB_LOG_FILE`.
+More script-level notes are in [`scripts/README.md`](/Volumes/ks91home/ks91/Programs/discord-agent-hub/scripts/README.md).
 
 ### Fast Dev Setup
 
