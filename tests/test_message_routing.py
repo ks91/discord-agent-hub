@@ -142,6 +142,7 @@ async def test_handle_user_message_routes_to_provider_and_persists(tmp_path):
     event_log = (tmp_path / "events.jsonl").read_text(encoding="utf-8")
     assert "message.user" in event_log
     assert "response.assistant" in event_log
+    assert '"model": "gpt-5.2"' in event_log
 
 
 async def test_handle_user_message_reports_provider_error(tmp_path):

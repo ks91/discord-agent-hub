@@ -431,6 +431,17 @@ def _agent_show_lines(*, agent, full: bool) -> list[str]:
     return lines
 
 
+def _response_model_name(*, agent, response) -> str | None:
+    raw_payload = getattr(response, "raw_payload", None) or {}
+    model = raw_payload.get("model")
+    if isinstance(model, str) and model:
+        return model
+    agent_model = getattr(agent, "model", None)
+    if isinstance(agent_model, str) and agent_model:
+        return agent_model
+    return None
+
+
 def _build_transcript_markdown(*, session, agent, messages: list[MessageRecord], usage: dict[str, int]) -> str:
     lines = [
         f"# Session Export",
@@ -961,6 +972,7 @@ async def handle_user_message(bot: DiscordAgentHub, message: discord.Message) ->
                 session_id=session.id,
                 provider=session.provider,
                 agent_id=agent.id,
+                model=_response_model_name(agent=agent, response=response),
                 discord_guild_id=session.discord_guild_id,
                 created_by_user_id=session.created_by_user_id,
                 content=response.output_text,
