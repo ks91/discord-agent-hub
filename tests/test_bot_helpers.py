@@ -1,4 +1,4 @@
-from discord_agent_hub.bot import _agent_show_lines, _build_agent_choices
+from discord_agent_hub.bot import _agent_show_lines, _build_agent_choices, _send_interaction_split
 from discord_agent_hub.config import Settings
 from discord_agent_hub.models import AgentDefinition, ProviderKind
 from discord_agent_hub.storage import AgentStore
@@ -93,3 +93,39 @@ def test_agent_show_lines_respects_hidden_instructions():
     lines = _agent_show_lines(agent=agent, full=True)
 
     assert lines[-1] == "(hidden for this agent)"
+
+
+class _FakeResponse:
+    def __init__(self) -> None:
+        self.calls = []
+
+    async def send_message(self, content: str, ephemeral: bool) -> None:
+        self.calls.append((content, ephemeral))
+
+
+class _FakeFollowup:
+    def __init__(self) -> None:
+        self.calls = []
+
+    async def send(self, content: str, ephemeral: bool) -> None:
+        self.calls.append((content, ephemeral))
+
+
+class _FakeInteraction:
+    def __init__(self) -> None:
+        self.response = _FakeResponse()
+        self.followup = _FakeFollowup()
+
+
+async def test_send_interaction_split_sends_followups_for_long_content():
+    interaction = _FakeInteraction()
+    content = "x" * 4000
+
+    await _send_interaction_split(interaction, content, ephemeral=True)
+
+    assert len(interaction.response.calls) == 1
+    assert len(interaction.followup.calls) == 2
+    assert interaction.response.calls[0][1] is True
+    assert all(ephemeral is True for _, ephemeral in interaction.followup.calls)
+    assert len(interaction.response.calls[0][0]) <= 1800
+    assert all(len(text) <= 1800 for text, _ in interaction.followup.calls)
