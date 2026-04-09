@@ -145,6 +145,10 @@ def _queue_depths_for(bot) -> dict[int, int]:
     return depths
 
 
+def _is_routable_thread_message(message: discord.Message) -> bool:
+    return message.type in {discord.MessageType.default, discord.MessageType.reply}
+
+
 async def _member_role_ids(bot: DiscordAgentHub, guild: discord.Guild | None, actor) -> set[int]:
     if guild is None or actor is None:
         return set()
@@ -1000,6 +1004,8 @@ def attach_message_handler(bot: DiscordAgentHub) -> None:
         if not bot.guild_allowed(message.guild):
             return
         if not isinstance(message.channel, discord.Thread):
+            return
+        if not _is_routable_thread_message(message):
             return
         async with message.channel.typing():
             await handle_user_message(bot, message)
