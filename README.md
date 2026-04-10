@@ -44,6 +44,7 @@ See [LICENSE](/Volumes/ks91home/ks91/Programs/discord-agent-hub/LICENSE) and [AU
 ```text
 data/
   agents.json              agent definitions
+  backups/agents/          rolling backups of agent definitions
   hub.sqlite3              sessions and messages
   events.jsonl             structured event log
 examples/
@@ -157,6 +158,8 @@ Useful optional settings include:
 
 If you run multiple hub instances on the same machine, set `DATA_DIR` explicitly to a different absolute path for each instance. Relying on the default `./data` can cause two instances to share the same runtime state if they start with the same working directory.
 
+`agents.json` is backed up automatically before each write. By default, the hub keeps the latest 10 generations under `data/backups/agents/`.
+
 To get a role ID in Discord:
 
 1. Enable `Developer Mode` in Discord settings
@@ -219,6 +222,8 @@ The current agent workflow is:
 This keeps agent definitions file-based and versionable, which fits long instruction prompts better than trying to manage everything through short slash-command arguments.
 
 For teaching and learning, `/agent-show-full` is useful when you want to read and imitate the full public prompt behind an agent instead of only seeing a short preview.
+
+For classroom use, it is a good idea to adopt a simple `agent_id` naming convention per team or group, such as `team3-interpreter` or `group-b-quizmaster`. This reduces accidental overwrites when many participants import or update agents at the same time.
 
 The import format also supports:
 

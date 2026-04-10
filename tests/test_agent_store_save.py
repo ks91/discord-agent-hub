@@ -103,3 +103,37 @@ def test_agent_store_save_agent_handles_concurrent_imports(tmp_path):
     ids = {agent.id for agent in store.list_agents()}
     for index in range(10):
         assert f"concurrent-agent-{index}" in ids
+
+
+def test_agent_store_keeps_generation_backups_on_write(tmp_path):
+    store = AgentStore(tmp_path / "agents.json")
+
+    store.save_agent(
+        AgentDefinition(
+            id="backup-agent",
+            name="Backup Agent",
+            provider=ProviderKind.OPENAI_RESPONSES,
+        )
+    )
+
+    backups = sorted((tmp_path / "backups" / "agents").glob("agents-*.json"))
+    assert backups
+    latest = backups[-1].read_text(encoding="utf-8")
+    assert '"id": "gpt-default"' in latest
+
+
+def test_agent_store_trims_old_backups(tmp_path):
+    store = AgentStore(tmp_path / "agents.json")
+    store.backup_retention = 3
+
+    for index in range(6):
+        store.save_agent(
+            AgentDefinition(
+                id=f"trim-agent-{index}",
+                name=f"Trim Agent {index}",
+                provider=ProviderKind.OPENAI_RESPONSES,
+            )
+        )
+
+    backups = sorted((tmp_path / "backups" / "agents").glob("agents-*.json"))
+    assert len(backups) == 3

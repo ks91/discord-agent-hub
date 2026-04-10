@@ -6,6 +6,7 @@ import sqlite3
 import tempfile
 import threading
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from discord_agent_hub.models import AgentDefinition, MessageRecord, ProviderKind, SessionRecord, utc_now
@@ -52,10 +53,14 @@ DEFAULT_AGENTS = [
 
 
 class AgentStore:
+    backup_retention = 10
+
     def __init__(self, path: Path) -> None:
         self.path = path
+        self.backup_dir = self.path.parent / "backups" / "agents"
         self._lock = threading.RLock()
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.backup_dir.mkdir(parents=True, exist_ok=True)
         with self._lock:
             if not self.path.exists():
                 self._write_json_atomic(DEFAULT_AGENTS)
@@ -121,6 +126,7 @@ class AgentStore:
             self._write_json_atomic(filtered)
 
     def _write_json_atomic(self, payload: list[dict]) -> None:
+        self._backup_current_file()
         fd, temp_name = tempfile.mkstemp(
             dir=str(self.path.parent),
             prefix=f"{self.path.name}.",
@@ -133,6 +139,18 @@ class AgentStore:
         finally:
             if os.path.exists(temp_name):
                 os.unlink(temp_name)
+
+    def _backup_current_file(self) -> None:
+        if not self.path.exists():
+            return
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
+        backup_path = self.backup_dir / f"{self.path.stem}-{timestamp}.json"
+        backup_path.write_text(self.path.read_text(encoding="utf-8"), encoding="utf-8")
+        backups = sorted(self.backup_dir.glob(f"{self.path.stem}-*.json"))
+        excess = len(backups) - self.backup_retention
+        if excess > 0:
+            for old_path in backups[:excess]:
+                old_path.unlink()
 
 
 class HubStore:
