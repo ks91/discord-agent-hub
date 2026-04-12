@@ -219,6 +219,8 @@ The current agent workflow is:
 - Update: re-import the same agent with `/agent-import overwrite:true`
 - Delete: use `/agent-delete`
 
+By default, the user who imports an agent becomes its notification watcher. If another user later overwrites or deletes that agent, the watcher receives a Discord DM notification.
+
 This keeps agent definitions file-based and versionable, which fits long instruction prompts better than trying to manage everything through short slash-command arguments.
 
 For teaching and learning, `/agent-show-full` is useful when you want to read and imitate the full public prompt behind an agent instead of only seeing a short preview.

@@ -435,6 +435,80 @@ def _agent_show_lines(*, agent, full: bool) -> list[str]:
     return lines
 
 
+def _agent_notify_user_ids(agent) -> list[int]:
+    notify_user_ids = agent.metadata.get("notify_user_ids")
+    if isinstance(notify_user_ids, list):
+        normalized: list[int] = []
+        for value in notify_user_ids:
+            try:
+                normalized.append(int(value))
+            except (TypeError, ValueError):
+                continue
+        if normalized:
+            return list(dict.fromkeys(normalized))
+
+    created_by = agent.metadata.get("created_by_user_id")
+    try:
+        created_by_id = int(created_by)
+    except (TypeError, ValueError):
+        return []
+    return [created_by_id]
+
+
+def _merge_agent_metadata(*, existing_agent, imported_agent, actor_user_id: int) -> dict:
+    metadata = dict(getattr(existing_agent, "metadata", {}) or {})
+    metadata.update(imported_agent.metadata or {})
+    metadata["created_by_user_id"] = metadata.get("created_by_user_id", actor_user_id)
+    metadata["notify_user_ids"] = _agent_notify_user_ids(
+        replace(imported_agent, metadata=metadata)
+    )
+    metadata["last_imported_by_user_id"] = actor_user_id
+    metadata["last_imported_at"] = utc_now()
+    return metadata
+
+
+def _agent_update_notification_recipient_ids(*, existing_agent, actor_user_id: int) -> list[int]:
+    return [user_id for user_id in _agent_notify_user_ids(existing_agent) if user_id != actor_user_id]
+
+
+def _actor_label(actor) -> str:
+    display_name = getattr(actor, "display_name", None)
+    if isinstance(display_name, str) and display_name:
+        return display_name
+    name = getattr(actor, "name", None)
+    if isinstance(name, str) and name:
+        return name
+    actor_id = getattr(actor, "id", None)
+    return f"user {actor_id}" if actor_id is not None else "another user"
+
+
+async def _notify_agent_watchers(
+    *,
+    bot: DiscordAgentHub,
+    user_ids: list[int],
+    content: str,
+    event_name: str,
+    agent_id: str,
+) -> None:
+    for user_id in user_ids:
+        try:
+            user = bot.get_user(user_id) or await bot.fetch_user(user_id)
+            await user.send(content)
+            bot.structured_logger.append(
+                event_name,
+                agent_id=agent_id,
+                notified_user_id=user_id,
+            )
+        except Exception as exc:
+            logger.warning("Failed to notify user %s for agent %s: %s", user_id, agent_id, exc)
+            bot.structured_logger.append(
+                f"{event_name}.failed",
+                agent_id=agent_id,
+                notified_user_id=user_id,
+                error=str(exc),
+            )
+
+
 def _response_model_name(*, agent, response) -> str | None:
     raw_payload = getattr(response, "raw_payload", None) or {}
     model = raw_payload.get("model")
@@ -512,8 +586,22 @@ async def agent_import(
         return
 
     raw = await file.read()
+    previous_agent = None
     try:
         agent = parse_agent_markdown(raw.decode("utf-8"))
+        if overwrite:
+            try:
+                previous_agent = bot.agent_store.get_agent(agent.id)
+            except KeyError:
+                previous_agent = None
+        agent = replace(
+            agent,
+            metadata=_merge_agent_metadata(
+                existing_agent=previous_agent,
+                imported_agent=agent,
+                actor_user_id=interaction.user.id,
+            ),
+        )
         bot.agent_store.save_agent(agent, overwrite=overwrite)
     except UnicodeDecodeError:
         await interaction.response.send_message("The uploaded file must be UTF-8 Markdown.", ephemeral=True)
@@ -536,6 +624,28 @@ async def agent_import(
         source_filename=file.filename,
         overwrite=overwrite,
     )
+    if previous_agent is not None:
+        recipient_ids = _agent_update_notification_recipient_ids(
+            existing_agent=previous_agent,
+            actor_user_id=interaction.user.id,
+        )
+        if recipient_ids:
+            await _notify_agent_watchers(
+                bot=bot,
+                user_ids=recipient_ids,
+                event_name="agent.updated_notified",
+                agent_id=agent.id,
+                content="\n".join(
+                    [
+                        f"Agent `{agent.id}` was updated in Discord.",
+                        f"Updated by: `{_actor_label(interaction.user)}`",
+                        f"Name: `{agent.name}`",
+                        f"Provider: `{agent.provider.value}`",
+                        f"Model: `{agent.model or 'default'}`",
+                        f"Source file: `{file.filename}`",
+                    ]
+                ),
+            )
     tools_text = ", ".join(f"{key}={value}" for key, value in sorted(agent.tools.items())) or "none"
     await interaction.response.send_message(
         "\n".join(
@@ -640,7 +750,12 @@ async def agent_delete(interaction: discord.Interaction, agent_id: str) -> None:
     await interaction.response.send_message(
         "\n".join(lines),
         ephemeral=True,
-        view=DeleteAgentConfirmView(bot=bot, agent_id=agent.id, agent_name=agent.name),
+        view=DeleteAgentConfirmView(
+            bot=bot,
+            agent_id=agent.id,
+            agent_name=agent.name,
+            notify_user_ids=_agent_notify_user_ids(agent),
+        ),
     )
 
 
@@ -654,11 +769,12 @@ async def agent_delete_agent_id_autocomplete(
 
 
 class DeleteAgentConfirmView(View):
-    def __init__(self, *, bot: DiscordAgentHub, agent_id: str, agent_name: str) -> None:
+    def __init__(self, *, bot: DiscordAgentHub, agent_id: str, agent_name: str, notify_user_ids: list[int] | None = None) -> None:
         super().__init__(timeout=300)
         self.bot = bot
         self.agent_id = agent_id
         self.agent_name = agent_name
+        self.notify_user_ids = notify_user_ids or []
 
     @discord.ui.button(label="Delete", style=discord.ButtonStyle.red)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -677,6 +793,21 @@ class DeleteAgentConfirmView(View):
             agent_id=self.agent_id,
             agent_name=self.agent_name,
         )
+        recipient_ids = [user_id for user_id in self.notify_user_ids if user_id != interaction.user.id]
+        if recipient_ids:
+            await _notify_agent_watchers(
+                bot=self.bot,
+                user_ids=recipient_ids,
+                event_name="agent.deleted_notified",
+                agent_id=self.agent_id,
+                content="\n".join(
+                    [
+                        f"Agent `{self.agent_id}` was deleted in Discord.",
+                        f"Deleted by: `{_actor_label(interaction.user)}`",
+                        f"Name: `{self.agent_name}`",
+                    ]
+                ),
+            )
         await interaction.response.edit_message(
             content=f"Deleted `{self.agent_id}`.",
             view=None,

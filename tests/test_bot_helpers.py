@@ -1,4 +1,11 @@
-from discord_agent_hub.bot import _agent_show_lines, _build_agent_choices, _send_interaction_split
+from discord_agent_hub.bot import (
+    _agent_show_lines,
+    _agent_update_notification_recipient_ids,
+    _build_agent_choices,
+    _merge_agent_metadata,
+    _notify_agent_watchers,
+    _send_interaction_split,
+)
 from discord_agent_hub.config import Settings
 from discord_agent_hub.models import AgentDefinition, ProviderKind
 from discord_agent_hub.storage import AgentStore
@@ -129,3 +136,100 @@ async def test_send_interaction_split_sends_followups_for_long_content():
     assert all(ephemeral is True for _, ephemeral in interaction.followup.calls)
     assert len(interaction.response.calls[0][0]) <= 1800
     assert all(len(text) <= 1800 for text, _ in interaction.followup.calls)
+
+
+def test_merge_agent_metadata_defaults_to_importing_user():
+    imported = AgentDefinition(
+        id="sample-agent",
+        name="Sample Agent",
+        provider=ProviderKind.OPENAI_RESPONSES,
+        metadata={},
+    )
+
+    metadata = _merge_agent_metadata(existing_agent=None, imported_agent=imported, actor_user_id=123)
+
+    assert metadata["created_by_user_id"] == 123
+    assert metadata["notify_user_ids"] == [123]
+    assert metadata["last_imported_by_user_id"] == 123
+    assert "last_imported_at" in metadata
+
+
+def test_merge_agent_metadata_preserves_existing_watchers_when_not_overridden():
+    existing = AgentDefinition(
+        id="sample-agent",
+        name="Sample Agent",
+        provider=ProviderKind.OPENAI_RESPONSES,
+        metadata={"created_by_user_id": 111, "notify_user_ids": [111, 222]},
+    )
+    imported = AgentDefinition(
+        id="sample-agent",
+        name="Updated Agent",
+        provider=ProviderKind.OPENAI_RESPONSES,
+        metadata={},
+    )
+
+    metadata = _merge_agent_metadata(existing_agent=existing, imported_agent=imported, actor_user_id=333)
+
+    assert metadata["created_by_user_id"] == 111
+    assert metadata["notify_user_ids"] == [111, 222]
+    assert metadata["last_imported_by_user_id"] == 333
+
+
+def test_update_notification_recipients_excludes_actor():
+    agent = AgentDefinition(
+        id="sample-agent",
+        name="Sample Agent",
+        provider=ProviderKind.OPENAI_RESPONSES,
+        metadata={"notify_user_ids": [111, 222, 333]},
+    )
+
+    recipients = _agent_update_notification_recipient_ids(existing_agent=agent, actor_user_id=222)
+
+    assert recipients == [111, 333]
+
+
+class _FakeStructuredLogger:
+    def __init__(self) -> None:
+        self.events = []
+
+    def append(self, event_name: str, **payload) -> None:
+        self.events.append((event_name, payload))
+
+
+class _FakeUser:
+    def __init__(self, user_id: int) -> None:
+        self.id = user_id
+        self.messages = []
+
+    async def send(self, content: str) -> None:
+        self.messages.append(content)
+
+
+class _FakeBot:
+    def __init__(self, users: dict[int, _FakeUser]) -> None:
+        self._users = users
+        self.structured_logger = _FakeStructuredLogger()
+
+    def get_user(self, user_id: int):
+        return self._users.get(user_id)
+
+    async def fetch_user(self, user_id: int):
+        return self._users[user_id]
+
+
+async def test_notify_agent_watchers_sends_direct_messages():
+    watcher = _FakeUser(111)
+    bot = _FakeBot({111: watcher})
+
+    await _notify_agent_watchers(
+        bot=bot,
+        user_ids=[111],
+        content="Agent updated.",
+        event_name="agent.updated_notified",
+        agent_id="sample-agent",
+    )
+
+    assert watcher.messages == ["Agent updated."]
+    assert bot.structured_logger.events == [
+        ("agent.updated_notified", {"agent_id": "sample-agent", "notified_user_id": 111})
+    ]
