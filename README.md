@@ -208,6 +208,8 @@ Uploaded documents are currently converted to text inside the hub and then sent 
 - Images embedded inside documents are not extracted yet
 - Older document attachments remain in conversation history; only old image attachments are compacted
 
+For PDF extraction, the hub now prefers the external `pdftotext` command when available and falls back to `pypdf` otherwise. On Linux this usually comes from `poppler-utils`; on macOS it usually comes from `poppler`.
+
 This keeps the implementation provider-agnostic while already supporting common workflows such as summarizing papers, notes, slides, and spreadsheets.
 
 ## Agent Management

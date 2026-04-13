@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from io import BytesIO
 from zipfile import ZipFile
+from types import SimpleNamespace
 
 from discord_agent_hub.document_extract import (
     DocumentExtractionError,
@@ -88,9 +89,23 @@ def test_extract_document_text_reads_xlsx_sheets():
     assert extract_document_text(filename="sheet.xlsx", raw=raw) == "[Sheet 1]\nName\t42\nAlice"
 
 
+def test_extract_document_text_prefers_pdftotext_when_available(monkeypatch):
+    monkeypatch.setattr("discord_agent_hub.document_extract.shutil.which", lambda cmd: "/usr/bin/pdftotext")
+
+    def fake_run(args, capture_output, text, check):
+        with open(args[-1], "w", encoding="utf-8") as fh:
+            fh.write("hello from pdftotext")
+        return SimpleNamespace(returncode=0, stderr="")
+
+    monkeypatch.setattr("discord_agent_hub.document_extract.subprocess.run", fake_run)
+
+    assert extract_document_text(filename="paper.pdf", raw=b"%PDF-1.4") == "hello from pdftotext"
+
+
 def test_extract_document_text_requires_optional_pdf_dependency(monkeypatch):
     import builtins
 
+    monkeypatch.setattr("discord_agent_hub.document_extract.shutil.which", lambda cmd: None)
     real_import = builtins.__import__
 
     def fake_import(name, *args, **kwargs):

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from io import BytesIO
+import shutil
+import subprocess
+import tempfile
 import re
 from zipfile import ZipFile
 import xml.etree.ElementTree as ET
@@ -42,11 +45,17 @@ def extract_document_text(*, filename: str, raw: bytes) -> str:
 
 
 def _extract_pdf_text(raw: bytes) -> str:
+    pdftotext_path = shutil.which("pdftotext")
+    if pdftotext_path:
+        extracted = _extract_pdf_text_with_pdftotext(raw, pdftotext_path)
+        if extracted:
+            return extracted
+
     try:
         from pypdf import PdfReader
     except ModuleNotFoundError as exc:
         raise DocumentExtractionError(
-            "PDF support requires the optional `pypdf` dependency."
+            "PDF support requires either the `pdftotext` command or the optional `pypdf` dependency."
         ) from exc
 
     reader = PdfReader(BytesIO(raw))
@@ -57,6 +66,27 @@ def _extract_pdf_text(raw: bytes) -> str:
         if text:
             pages.append(text)
     return "\n\n".join(pages).strip()
+
+
+def _extract_pdf_text_with_pdftotext(raw: bytes, pdftotext_path: str) -> str:
+    with tempfile.NamedTemporaryFile(suffix=".pdf") as pdf_file, tempfile.NamedTemporaryFile(
+        suffix=".txt"
+    ) as text_file:
+        pdf_file.write(raw)
+        pdf_file.flush()
+        try:
+            result = subprocess.run(
+                [pdftotext_path, "-enc", "UTF-8", pdf_file.name, text_file.name],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except OSError as exc:
+            raise DocumentExtractionError(f"Failed to run pdftotext: {exc}") from exc
+        if result.returncode != 0:
+            stderr = (result.stderr or "").strip()
+            raise DocumentExtractionError(f"pdftotext failed: {stderr or 'unknown error'}")
+        return text_file.read().decode("utf-8", errors="replace").strip()
 
 
 def _extract_docx_text(raw: bytes) -> str:
