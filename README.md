@@ -204,6 +204,7 @@ Uploaded documents are currently converted to text inside the hub and then sent 
 
 - Supported formats: `.txt`, `.md`, `.csv`, `.pdf`, `.docx`, `.pptx`, `.xlsx`
 - Document text is stored in local session history
+- Provider-bound document text is currently capped to keep token usage bounded
 - Images embedded inside documents are not extracted yet
 - Older document attachments remain in conversation history; only old image attachments are compacted
 

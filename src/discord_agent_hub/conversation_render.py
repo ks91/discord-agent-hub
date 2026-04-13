@@ -3,7 +3,7 @@ from __future__ import annotations
 from discord_agent_hub.models import MessageRecord
 
 
-MAX_DOCUMENT_TEXT_CHARS = 12000
+MAX_DOCUMENT_TEXT_CHARS = 30000
 
 
 def render_message_text(item: MessageRecord) -> str:
