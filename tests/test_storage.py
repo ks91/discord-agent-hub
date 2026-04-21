@@ -99,3 +99,38 @@ def test_hub_store_enables_wal_and_busy_timeout(tmp_path):
 
     assert str(journal_mode).lower() == "wal"
     assert busy_timeout == 5000
+
+
+def test_hub_store_imports_and_retrieves_knowledge_chunks(tmp_path):
+    store = HubStore(tmp_path / "hub.sqlite3")
+
+    document_id, chunk_count = store.import_knowledge_document(
+        source_id="quiz-source",
+        filename="notes.md",
+        media_type="text/markdown",
+        text="金融の未来ではサイバーフィジカル社会と決済インフラが重要です。",
+        created_by_user_id=123,
+    )
+
+    assert document_id
+    assert chunk_count == 1
+    sources = store.list_knowledge_sources()
+    assert sources == [
+        {
+            "id": "quiz-source",
+            "created_by_user_id": 123,
+            "created_at": sources[0]["created_at"],
+            "document_count": 1,
+            "chunk_count": 1,
+        }
+    ]
+    chunks = store.retrieve_knowledge_chunks(
+        source_ids=["quiz-source"],
+        query="決済インフラについて教えて",
+        limit=3,
+    )
+
+    assert len(chunks) == 1
+    assert chunks[0].source_id == "quiz-source"
+    assert chunks[0].filename == "notes.md"
+    assert "決済インフラ" in chunks[0].text

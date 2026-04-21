@@ -1,11 +1,15 @@
 from discord_agent_hub.bot import (
     _agent_show_lines,
     _agent_update_notification_recipient_ids,
+    _attach_knowledge_context,
     _build_agent_choices,
+    _knowledge_source_ids,
     _merge_agent_metadata,
     _notify_agent_watchers,
     _send_interaction_split,
 )
+from discord_agent_hub.knowledge import KnowledgeChunk
+from discord_agent_hub.models import MessageRecord
 from discord_agent_hub.config import Settings
 from discord_agent_hub.models import AgentDefinition, ProviderKind
 from discord_agent_hub.storage import AgentStore
@@ -100,6 +104,47 @@ def test_agent_show_lines_respects_hidden_instructions():
     lines = _agent_show_lines(agent=agent, full=True)
 
     assert lines[-1] == "(hidden for this agent)"
+
+
+def test_knowledge_source_ids_reads_agent_metadata():
+    agent = AgentDefinition(
+        id="knowledge-agent",
+        name="Knowledge Agent",
+        provider=ProviderKind.OPENAI_RESPONSES,
+        metadata={"knowledge_source_ids": ["source-a", "source-b"]},
+    )
+
+    assert _knowledge_source_ids(agent) == ["source-a", "source-b"]
+
+
+def test_attach_knowledge_context_adds_document_to_latest_user_message():
+    conversation = [
+        MessageRecord(
+            session_id="session-1",
+            role="user",
+            author_id=1,
+            author_name="alice",
+            content="What should I ask?",
+            created_at="2026-04-22T00:00:00+00:00",
+        )
+    ]
+    chunks = [
+        KnowledgeChunk(
+            id="chunk-1",
+            source_id="source-a",
+            document_id="doc-1",
+            chunk_index=1,
+            filename="notes.md",
+            text="Ask about settlement risk.",
+            score=3,
+        )
+    ]
+
+    updated = _attach_knowledge_context(conversation, chunks)
+
+    assert conversation[0].attachments == []
+    assert updated[0].attachments[0]["type"] == "document"
+    assert "settlement risk" in updated[0].attachments[0]["text"]
 
 
 class _FakeResponse:

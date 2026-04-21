@@ -132,6 +132,8 @@ When this is set, commands are synced to that guild immediately instead of waiti
 - `/agent-show`: shows the imported agent definition
 - `/agent-show-full`: shows the full public instructions for an agent
 - `/agent-delete`: deletes an agent definition after confirmation
+- `/knowledge-import`: imports a document into a reusable knowledge source
+- `/knowledge-list`: lists imported knowledge sources
 - `/session-show`: shows the current thread's session metadata and token totals
 - `/log-export`: exports the current session transcript and JSONL events
 - `/usage-report`: shows a lightweight usage summary for the current server
@@ -212,6 +214,51 @@ For PDF extraction, the hub now prefers the external `pdftotext` command when av
 
 This keeps the implementation provider-agnostic while already supporting common workflows such as summarizing papers, notes, slides, and spreadsheets.
 
+## Knowledge Sources
+
+Knowledge sources are reusable document collections that agents can retrieve from during chat.
+
+This is different from ordinary document attachments:
+
+- A document attachment belongs to one message/session
+- A knowledge source is imported once and can be bound to one or more agents
+- Retrieved excerpts are injected into provider context only when they appear relevant to the current user message
+
+Import a source with:
+
+```text
+/knowledge-import source_id:finance-notes file:(notes.pdf)
+```
+
+List sources with:
+
+```text
+/knowledge-list
+```
+
+To bind an agent to a knowledge source, add `knowledge_sources` to the agent Markdown block:
+
+````md
+```agent
+id: finance-quiz
+name: Finance Quiz
+provider: openai_responses
+model: gpt-5.4
+knowledge_sources: finance-notes
+```
+
+Use the attached knowledge source as grounding context when answering.
+If the retrieved excerpts do not contain enough information, say so.
+````
+
+Multiple sources can be comma-separated:
+
+```yaml
+knowledge_sources: finance-notes, syllabus-2026
+```
+
+The current implementation uses hub-managed lexical retrieval over extracted document text. It is intentionally provider-agnostic and works with OpenAI, Anthropic, and Gemini agents, but it is not yet a provider-native vector store or managed file-search integration.
+
 ## Agent Management
 
 The current agent workflow is:
@@ -233,6 +280,7 @@ For classroom use, it is a good idea to adopt a simple `agent_id` naming convent
 The import format also supports:
 
 - `public_instructions: false` to hide the instructions preview in `/agent-show`
+- `knowledge_sources: source-a, source-b`
 - `tools.web_search: true|false`
 - `tools.code_execution: true|false`
 

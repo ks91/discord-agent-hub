@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from discord_agent_hub.knowledge import KnowledgeChunk, score_chunk, split_text_into_chunks
 from discord_agent_hub.models import AgentDefinition, MessageRecord, ProviderKind, SessionRecord, utc_now
 
 
@@ -193,6 +194,30 @@ class HubStore:
                     attachments text not null default '[]',
                     created_at text not null
                 );
+
+                create table if not exists knowledge_sources (
+                    id text primary key,
+                    created_by_user_id integer,
+                    created_at text not null
+                );
+
+                create table if not exists knowledge_documents (
+                    id text primary key,
+                    source_id text not null,
+                    filename text not null,
+                    media_type text not null,
+                    text text not null,
+                    created_at text not null
+                );
+
+                create table if not exists knowledge_chunks (
+                    id text primary key,
+                    source_id text not null,
+                    document_id text not null,
+                    chunk_index integer not null,
+                    filename text not null,
+                    text text not null
+                );
                 """
             )
             existing_columns = {
@@ -291,3 +316,92 @@ class HubStore:
             payload["attachments"] = json.loads(payload.get("attachments") or "[]")
             messages.append(MessageRecord(**payload))
         return messages
+
+    def import_knowledge_document(
+        self,
+        *,
+        source_id: str,
+        filename: str,
+        media_type: str,
+        text: str,
+        created_by_user_id: int | None,
+    ) -> tuple[str, int]:
+        source_id = source_id.strip()
+        if not source_id:
+            raise ValueError("source_id is required")
+        document_id = str(uuid.uuid4())
+        created_at = utc_now()
+        chunks = split_text_into_chunks(text)
+        with self._connect() as conn:
+            conn.execute(
+                """
+                insert into knowledge_sources (id, created_by_user_id, created_at)
+                values (?, ?, ?)
+                on conflict(id) do nothing
+                """,
+                (source_id, created_by_user_id, created_at),
+            )
+            conn.execute(
+                """
+                insert into knowledge_documents (id, source_id, filename, media_type, text, created_at)
+                values (?, ?, ?, ?, ?, ?)
+                """,
+                (document_id, source_id, filename, media_type, text, created_at),
+            )
+            for index, chunk in enumerate(chunks, start=1):
+                conn.execute(
+                    """
+                    insert into knowledge_chunks (id, source_id, document_id, chunk_index, filename, text)
+                    values (?, ?, ?, ?, ?, ?)
+                    """,
+                    (str(uuid.uuid4()), source_id, document_id, index, filename, chunk),
+                )
+        return document_id, len(chunks)
+
+    def list_knowledge_sources(self) -> list[dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                select
+                    s.id,
+                    s.created_by_user_id,
+                    s.created_at,
+                    count(distinct d.id) as document_count,
+                    count(c.id) as chunk_count
+                from knowledge_sources s
+                left join knowledge_documents d on d.source_id = s.id
+                left join knowledge_chunks c on c.source_id = s.id
+                group by s.id, s.created_by_user_id, s.created_at
+                order by s.id asc
+                """
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def retrieve_knowledge_chunks(
+        self,
+        *,
+        source_ids: list[str],
+        query: str,
+        limit: int = 5,
+    ) -> list[KnowledgeChunk]:
+        if not source_ids or not query.strip() or limit <= 0:
+            return []
+        placeholders = ",".join("?" for _ in source_ids)
+        with self._connect() as conn:
+            rows = conn.execute(
+                f"""
+                select id, source_id, document_id, chunk_index, filename, text
+                from knowledge_chunks
+                where source_id in ({placeholders})
+                """,
+                tuple(source_ids),
+            ).fetchall()
+        scored = []
+        for row in rows:
+            payload = dict(row)
+            score = score_chunk(query, payload["text"])
+            if score <= 0:
+                continue
+            scored.append(KnowledgeChunk(**payload, score=score))
+        scored.sort(key=lambda chunk: (-chunk.score, chunk.source_id, chunk.filename, chunk.chunk_index))
+        return scored[:limit]

@@ -26,6 +26,7 @@ from discord_agent_hub.agent_markdown import AgentMarkdownError, parse_agent_mar
 from discord_agent_hub.conversation_render import render_message_text
 from discord_agent_hub.config import Settings
 from discord_agent_hub.document_extract import DocumentExtractionError, extract_document_text, is_supported_document
+from discord_agent_hub.knowledge import KnowledgeChunk, build_knowledge_context
 from discord_agent_hub.models import MessageRecord, utc_now
 from discord_agent_hub.providers.base import ProviderRegistry
 from discord_agent_hub.storage import AgentStore, HubStore
@@ -62,6 +63,8 @@ class DiscordAgentHub(commands.Bot):
         self.tree.add_command(agent_delete)
         self.tree.add_command(agent_show)
         self.tree.add_command(agent_show_full)
+        self.tree.add_command(knowledge_import)
+        self.tree.add_command(knowledge_list)
         self.tree.add_command(hub_status)
         self.tree.add_command(chat)
         self.tree.add_command(session_show)
@@ -267,6 +270,40 @@ def _compact_conversation_for_provider(conversation: list[MessageRecord]) -> lis
             continue
         compacted.append(replace(item, attachments=filtered))
     return compacted
+
+
+def _knowledge_source_ids(agent) -> list[str]:
+    value = agent.metadata.get("knowledge_source_ids")
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    return []
+
+
+def _attach_knowledge_context(
+    conversation: list[MessageRecord],
+    chunks: list[KnowledgeChunk],
+) -> list[MessageRecord]:
+    context = build_knowledge_context(chunks)
+    if not context:
+        return conversation
+    for index in range(len(conversation) - 1, -1, -1):
+        item = conversation[index]
+        if item.role != "user":
+            continue
+        attachments = list(item.attachments)
+        attachments.append(
+            {
+                "type": "document",
+                "filename": "retrieved-knowledge.md",
+                "media_type": "text/markdown",
+                "text": context,
+            }
+        )
+        updated = replace(item, attachments=attachments)
+        return conversation[:index] + [updated] + conversation[index + 1:]
+    return conversation
 
 
 def _build_agent_choices(agent_store: AgentStore, current: str) -> list[app_commands.Choice[str]]:
@@ -821,6 +858,82 @@ class DeleteAgentConfirmView(View):
         )
 
 
+@app_commands.command(name="knowledge-import", description="Import a document into a knowledge source")
+@app_commands.describe(
+    source_id="Knowledge source ID to create or extend",
+    file="Document file to extract and index",
+)
+async def knowledge_import(
+    interaction: discord.Interaction,
+    source_id: str,
+    file: discord.Attachment,
+) -> None:
+    bot = interaction.client
+    assert isinstance(bot, DiscordAgentHub)
+    if not bot.guild_allowed(interaction.guild):
+        await interaction.response.send_message("This server is not allowed.", ephemeral=True)
+        return
+    if not is_supported_document(file.filename):
+        await interaction.response.send_message("Please upload a supported document file.", ephemeral=True)
+        return
+
+    raw = await file.read()
+    try:
+        text = extract_document_text(filename=file.filename, raw=raw)
+    except DocumentExtractionError as exc:
+        await interaction.response.send_message(f"Attachment error: {file.filename}: {exc}", ephemeral=True)
+        return
+    try:
+        document_id, chunk_count = bot.hub_store.import_knowledge_document(
+            source_id=source_id,
+            filename=file.filename,
+            media_type=file.content_type or mimetypes.guess_type(file.filename)[0] or "application/octet-stream",
+            text=text,
+            created_by_user_id=interaction.user.id,
+        )
+    except ValueError as exc:
+        await interaction.response.send_message(str(exc), ephemeral=True)
+        return
+
+    bot.structured_logger.append(
+        "knowledge.imported",
+        source_id=source_id,
+        document_id=document_id,
+        filename=file.filename,
+        chunk_count=chunk_count,
+        imported_by_user_id=interaction.user.id,
+    )
+    await interaction.response.send_message(
+        "\n".join(
+            [
+                f"Imported `{file.filename}` into knowledge source `{source_id}`.",
+                f"Document ID: `{document_id}`",
+                f"Chunks: `{chunk_count}`",
+            ]
+        ),
+        ephemeral=True,
+    )
+
+
+@app_commands.command(name="knowledge-list", description="List knowledge sources")
+async def knowledge_list(interaction: discord.Interaction) -> None:
+    bot = interaction.client
+    assert isinstance(bot, DiscordAgentHub)
+    if not bot.guild_allowed(interaction.guild):
+        await interaction.response.send_message("This server is not allowed.", ephemeral=True)
+        return
+
+    sources = bot.hub_store.list_knowledge_sources()
+    if not sources:
+        await interaction.response.send_message("No knowledge sources imported yet.", ephemeral=True)
+        return
+    lines = [
+        f"- `{source['id']}`: {source['document_count']} documents, {source['chunk_count']} chunks"
+        for source in sources
+    ]
+    await _send_interaction_split(interaction, "\n".join(lines), ephemeral=True)
+
+
 @app_commands.command(name="hub-status", description="Show configured providers and defaults")
 async def hub_status(interaction: discord.Interaction) -> None:
     bot = interaction.client
@@ -1069,6 +1182,22 @@ async def handle_user_message(bot: DiscordAgentHub, message: discord.Message) ->
             )
 
             conversation = _compact_conversation_for_provider(bot.hub_store.list_messages(session.id))
+            source_ids = _knowledge_source_ids(agent)
+            if source_ids:
+                retrieved_chunks = bot.hub_store.retrieve_knowledge_chunks(
+                    source_ids=source_ids,
+                    query=message.content,
+                    limit=5,
+                )
+                if retrieved_chunks:
+                    conversation = _attach_knowledge_context(conversation, retrieved_chunks)
+                    bot.structured_logger.append(
+                        "knowledge.retrieved",
+                        session_id=session.id,
+                        agent_id=agent.id,
+                        source_ids=source_ids,
+                        chunk_ids=[chunk.id for chunk in retrieved_chunks],
+                    )
             try:
                 response = await _generate_with_retry(
                     bot=bot,

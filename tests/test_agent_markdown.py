@@ -20,6 +20,7 @@ public_instructions: false
 tools:
   web_search: true
   code_execution: false
+knowledge_sources: gamer-pat-syllabus, reading-pack
 ```
 
 ## Instructions
@@ -39,6 +40,7 @@ Focus on evidence.
     assert agent.enabled is True
     assert agent.public_instructions is False
     assert agent.tools == {"web_search": True, "code_execution": False}
+    assert agent.metadata["knowledge_source_ids"] == ["gamer-pat-syllabus", "reading-pack"]
     assert "You are GAMER PAT." in agent.instructions
     assert "## Instructions" in agent.instructions
 

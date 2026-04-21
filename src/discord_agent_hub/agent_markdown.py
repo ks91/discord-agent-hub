@@ -41,6 +41,12 @@ def parse_agent_markdown(markdown_text: str) -> AgentDefinition:
         if not isinstance(value, bool):
             raise AgentMarkdownError(f"tools.{key} must be true or false")
 
+    knowledge_source_ids = _parse_string_list(metadata.get("knowledge_sources", ""))
+
+    agent_metadata: dict[str, object] = {"import_format": "markdown-agent-block"}
+    if knowledge_source_ids:
+        agent_metadata["knowledge_source_ids"] = knowledge_source_ids
+
     return AgentDefinition(
         id=str(metadata["id"]),
         name=str(metadata["name"]),
@@ -51,7 +57,7 @@ def parse_agent_markdown(markdown_text: str) -> AgentDefinition:
         public_instructions=bool(metadata.get("public_instructions", True)),
         tools=tools,
         instructions=instructions,
-        metadata={"import_format": "markdown-agent-block"},
+        metadata=agent_metadata,
     )
 
 
@@ -112,3 +118,11 @@ def _parse_scalar(raw: str) -> object:
     if raw.startswith("'") and raw.endswith("'") and len(raw) >= 2:
         return raw[1:-1]
     return raw
+
+
+def _parse_string_list(value: object) -> list[str]:
+    if not value:
+        return []
+    if not isinstance(value, str):
+        raise AgentMarkdownError("knowledge_sources must be a comma-separated string")
+    return [item.strip() for item in value.split(",") if item.strip()]
