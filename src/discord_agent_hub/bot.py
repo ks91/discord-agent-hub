@@ -442,6 +442,7 @@ def _summarize_usage(events: list[dict]) -> dict[str, int]:
         "total_tokens": 0,
         "cache_creation_input_tokens": 0,
         "cache_read_input_tokens": 0,
+        "cached_input_tokens": 0,
     }
     for event in events:
         if event.get("event") != "response.assistant":
@@ -1146,6 +1147,7 @@ async def session_show(interaction: discord.Interaction) -> None:
         f"Total tokens: `{usage['total_tokens']}`",
         f"Cache creation tokens: `{usage['cache_creation_input_tokens']}`",
         f"Cache read tokens: `{usage['cache_read_input_tokens']}`",
+        f"Cached input tokens: `{usage['cached_input_tokens']}`",
     ]
     await interaction.response.send_message("\n".join(lines), ephemeral=True)
 

@@ -77,8 +77,10 @@ class OpenAIResponsesProvider(Provider):
     @staticmethod
     def _extract_usage(payload: dict) -> dict:
         usage = payload.get("usage") or {}
+        input_details = usage.get("input_tokens_details") or usage.get("prompt_tokens_details") or {}
         return {
             "input_tokens": usage.get("input_tokens"),
             "output_tokens": usage.get("output_tokens"),
             "total_tokens": usage.get("total_tokens"),
+            "cached_input_tokens": input_details.get("cached_tokens"),
         }

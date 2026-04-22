@@ -74,6 +74,27 @@ async def test_openai_provider_uses_input_text_for_user_and_output_text_for_assi
         "input_tokens": None,
         "output_tokens": None,
         "total_tokens": None,
+        "cached_input_tokens": None,
+    }
+
+
+def test_openai_provider_extracts_cached_input_tokens():
+    usage = OpenAIResponsesProvider._extract_usage(
+        {
+            "usage": {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "total_tokens": 120,
+                "input_tokens_details": {"cached_tokens": 80},
+            }
+        }
+    )
+
+    assert usage == {
+        "input_tokens": 100,
+        "output_tokens": 20,
+        "total_tokens": 120,
+        "cached_input_tokens": 80,
     }
 
 

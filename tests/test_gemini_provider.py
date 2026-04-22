@@ -75,6 +75,27 @@ async def test_gemini_provider_maps_conversation_and_extracts_text():
         "input_tokens": None,
         "output_tokens": None,
         "total_tokens": None,
+        "cached_input_tokens": None,
+    }
+
+
+def test_gemini_provider_extracts_cached_input_tokens():
+    usage = GeminiAPIProvider._extract_usage(
+        {
+            "usageMetadata": {
+                "promptTokenCount": 100,
+                "candidatesTokenCount": 20,
+                "totalTokenCount": 120,
+                "cachedContentTokenCount": 75,
+            }
+        }
+    )
+
+    assert usage == {
+        "input_tokens": 100,
+        "output_tokens": 20,
+        "total_tokens": 120,
+        "cached_input_tokens": 75,
     }
 
 

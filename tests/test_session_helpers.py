@@ -20,6 +20,7 @@ def test_summarize_usage_totals_response_events():
                     "total_tokens": 15,
                     "cache_creation_input_tokens": 9,
                     "cache_read_input_tokens": 0,
+                    "cached_input_tokens": 4,
                 },
             },
             {
@@ -30,6 +31,7 @@ def test_summarize_usage_totals_response_events():
                     "total_tokens": 10,
                     "cache_creation_input_tokens": 0,
                     "cache_read_input_tokens": 11,
+                    "cached_input_tokens": 6,
                 },
             },
             {"event": "message.user"},
@@ -42,6 +44,7 @@ def test_summarize_usage_totals_response_events():
         "total_tokens": 25,
         "cache_creation_input_tokens": 9,
         "cache_read_input_tokens": 11,
+        "cached_input_tokens": 10,
     }
 
 

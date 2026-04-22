@@ -120,4 +120,5 @@ class GeminiAPIProvider(Provider):
             "input_tokens": usage.get("promptTokenCount"),
             "output_tokens": usage.get("candidatesTokenCount"),
             "total_tokens": usage.get("totalTokenCount"),
+            "cached_input_tokens": usage.get("cachedContentTokenCount"),
         }
