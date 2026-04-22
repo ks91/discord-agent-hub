@@ -12,8 +12,26 @@ from discord_agent_hub.models import AgentDefinition, MessageRecord, ProviderKin
 def test_summarize_usage_totals_response_events():
     usage = _summarize_usage(
         [
-            {"event": "response.assistant", "usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}},
-            {"event": "response.assistant", "usage": {"input_tokens": 7, "output_tokens": 3, "total_tokens": 10}},
+            {
+                "event": "response.assistant",
+                "usage": {
+                    "input_tokens": 10,
+                    "output_tokens": 5,
+                    "total_tokens": 15,
+                    "cache_creation_input_tokens": 9,
+                    "cache_read_input_tokens": 0,
+                },
+            },
+            {
+                "event": "response.assistant",
+                "usage": {
+                    "input_tokens": 7,
+                    "output_tokens": 3,
+                    "total_tokens": 10,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 11,
+                },
+            },
             {"event": "message.user"},
         ]
     )
@@ -22,6 +40,8 @@ def test_summarize_usage_totals_response_events():
         "input_tokens": 17,
         "output_tokens": 8,
         "total_tokens": 25,
+        "cache_creation_input_tokens": 9,
+        "cache_read_input_tokens": 11,
     }
 
 
