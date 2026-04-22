@@ -69,6 +69,8 @@ async def test_anthropic_provider_maps_conversation_and_extracts_text():
     assert captured["headers"]["x-api-key"] == "test-key"
     assert captured["headers"]["anthropic-version"] == "2023-06-01"
     assert captured["json"]["model"] == "claude-sonnet-4-0"
+    assert captured["json"]["max_tokens"] == 4096
+    assert captured["json"]["cache_control"] == {"type": "ephemeral"}
     assert captured["json"]["system"] == "Be precise."
     assert captured["json"]["messages"] == [
         {"role": "user", "content": [{"type": "text", "text": "alice: Hello"}]},

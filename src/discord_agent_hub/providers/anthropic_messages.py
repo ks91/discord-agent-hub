@@ -66,6 +66,7 @@ class AnthropicMessagesProvider(Provider):
         payload = {
             "model": agent.model or self.default_model,
             "max_tokens": 4096,
+            "cache_control": {"type": "ephemeral"},
             "system": agent.instructions or "You are a helpful assistant.",
             "messages": messages,
         }
