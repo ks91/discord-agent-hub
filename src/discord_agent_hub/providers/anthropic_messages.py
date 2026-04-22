@@ -65,7 +65,7 @@ class AnthropicMessagesProvider(Provider):
 
         payload = {
             "model": agent.model or self.default_model,
-            "max_tokens": 2048,
+            "max_tokens": 4096,
             "system": agent.instructions or "You are a helpful assistant.",
             "messages": messages,
         }
