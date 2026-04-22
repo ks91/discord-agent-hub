@@ -967,6 +967,14 @@ class DeleteAgentConfirmView(View):
     source_id="Knowledge source ID to create or extend",
     file="Document file to extract and index",
     overwrite="Replace the whole knowledge source before importing this file",
+    backend="Knowledge backend to use",
+)
+@app_commands.choices(
+    backend=[
+        app_commands.Choice(name="hub_lexical", value="hub_lexical"),
+        app_commands.Choice(name="openai_file_search", value="openai_file_search"),
+        app_commands.Choice(name="gemini_file_search", value="gemini_file_search"),
+    ]
 )
 async def knowledge_import(
     interaction: discord.Interaction,
@@ -980,12 +988,13 @@ async def knowledge_import(
     if not bot.guild_allowed(interaction.guild):
         await interaction.response.send_message("This server is not allowed.", ephemeral=True)
         return
+    await interaction.response.defer(ephemeral=True)
     if not is_supported_document(file.filename):
-        await interaction.response.send_message("Please upload a supported document file.", ephemeral=True)
+        await interaction.followup.send("Please upload a supported document file.", ephemeral=True)
         return
     backend = backend.strip()
     if backend not in KNOWLEDGE_BACKENDS:
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"Unknown knowledge backend `{backend}`. Use one of: {', '.join(sorted(KNOWLEDGE_BACKENDS))}.",
             ephemeral=True,
         )
@@ -995,7 +1004,7 @@ async def knowledge_import(
     try:
         text = extract_document_text(filename=file.filename, raw=raw)
     except DocumentExtractionError as exc:
-        await interaction.response.send_message(f"Attachment error: {file.filename}: {exc}", ephemeral=True)
+        await interaction.followup.send(f"Attachment error: {file.filename}: {exc}", ephemeral=True)
         return
     existing_sources = bot.hub_store.get_knowledge_sources([source_id])
     existing_remote_store_id = None if overwrite or not existing_sources else existing_sources[0].get("remote_store_id")
@@ -1020,7 +1029,7 @@ async def knowledge_import(
             )
     except Exception as exc:
         logger.exception("Knowledge backend import failed")
-        await interaction.response.send_message(f"Knowledge backend error: {exc}", ephemeral=True)
+        await interaction.followup.send(f"Knowledge backend error: {exc}", ephemeral=True)
         return
     try:
         document_id, chunk_count = bot.hub_store.import_knowledge_document(
@@ -1034,7 +1043,7 @@ async def knowledge_import(
             remote_store_id=remote_store_id,
         )
     except ValueError as exc:
-        await interaction.response.send_message(str(exc), ephemeral=True)
+        await interaction.followup.send(str(exc), ephemeral=True)
         return
 
     bot.structured_logger.append(
@@ -1048,7 +1057,7 @@ async def knowledge_import(
         backend=backend,
         remote_store_id=remote_store_id,
     )
-    await interaction.response.send_message(
+    await interaction.followup.send(
         "\n".join(
             [
                 f"{'Replaced' if overwrite else 'Imported'} `{file.filename}` into knowledge source `{source_id}`.",
