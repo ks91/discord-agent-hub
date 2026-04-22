@@ -449,6 +449,7 @@ async def _usage_report_lines_for_guild(events: list[dict], *, guild) -> list[st
 
 def _agent_show_lines(*, agent, full: bool) -> list[str]:
     tools_text = ", ".join(f"{key}={value}" for key, value in sorted(agent.tools.items())) or "none"
+    knowledge_sources_text = ", ".join(_knowledge_source_ids(agent)) or "none"
     instructions_text = agent.instructions.strip() or "(empty)"
     if not full:
         instructions_text = instructions_text[:1200]
@@ -460,6 +461,7 @@ def _agent_show_lines(*, agent, full: bool) -> list[str]:
         f"Enabled: `{agent.enabled}`",
         f"Public instructions: `{agent.public_instructions}`",
         f"Tools: `{tools_text}`",
+        f"Knowledge sources: `{knowledge_sources_text}`",
     ]
     if agent.description:
         lines.append(f"Description: {agent.description}")
@@ -684,6 +686,7 @@ async def agent_import(
                 ),
             )
     tools_text = ", ".join(f"{key}={value}" for key, value in sorted(agent.tools.items())) or "none"
+    knowledge_sources_text = ", ".join(_knowledge_source_ids(agent)) or "none"
     await interaction.response.send_message(
         "\n".join(
             [
@@ -692,6 +695,7 @@ async def agent_import(
                 f"Provider: `{agent.provider.value}`",
                 f"Model: `{agent.model or 'default'}`",
                 f"Tools: `{tools_text}`",
+                f"Knowledge sources: `{knowledge_sources_text}`",
             ]
         ),
         ephemeral=True,

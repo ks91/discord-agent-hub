@@ -92,6 +92,19 @@ def test_agent_show_lines_can_show_full_instructions():
     assert lines[-1] == "x" * 1500
 
 
+def test_agent_show_lines_includes_knowledge_sources():
+    agent = AgentDefinition(
+        id="knowledge-agent",
+        name="Knowledge Agent",
+        provider=ProviderKind.OPENAI_RESPONSES,
+        metadata={"knowledge_source_ids": ["source-a", "source-b"]},
+    )
+
+    lines = _agent_show_lines(agent=agent, full=False)
+
+    assert "Knowledge sources: `source-a, source-b`" in lines
+
+
 def test_agent_show_lines_respects_hidden_instructions():
     agent = AgentDefinition(
         id="hidden-agent",
