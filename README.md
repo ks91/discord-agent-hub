@@ -230,6 +230,8 @@ Import a source with:
 /knowledge-import source_id:finance-notes file:(notes.pdf)
 ```
 
+By default, knowledge sources use the `hub_lexical` backend. This stores extracted text in SQLite and performs lightweight lexical retrieval inside the hub.
+
 Use `overwrite:true` to replace the whole knowledge source with the uploaded file:
 
 ```text
@@ -237,6 +239,23 @@ Use `overwrite:true` to replace the whole knowledge source with the uploaded fil
 ```
 
 Without `overwrite:true`, importing another file with the same `source_id` appends that document to the existing source.
+
+You can choose a backend:
+
+```text
+/knowledge-import source_id:gpt-papers-openai file:(gpt4.pdf) backend:openai_file_search
+/knowledge-import source_id:gpt-papers-gemini file:(gpt4.pdf) backend:gemini_file_search
+```
+
+Backends:
+
+- `hub_lexical`: provider-agnostic SQLite lexical retrieval; works with OpenAI, Anthropic, and Gemini agents
+- `openai_file_search`: OpenAI vector store / Responses API `file_search`; works with OpenAI agents
+- `gemini_file_search`: Gemini File Search store; works with Gemini agents
+
+Provider-native backends are source-specific. For the same document set, prefer separate source IDs such as `gpt-papers-hub`, `gpt-papers-openai`, and `gpt-papers-gemini`.
+
+Gemini native File Search requires the `google-genai` Python package and a configured `GEMINI_API_KEY`. After pulling a version that adds or changes dependencies, re-run `pip install -e .`.
 
 List sources with:
 
@@ -265,7 +284,7 @@ Multiple sources can be comma-separated:
 knowledge_sources: finance-notes, syllabus-2026
 ```
 
-The current implementation uses hub-managed lexical retrieval over extracted document text. It is intentionally provider-agnostic and works with OpenAI, Anthropic, and Gemini agents, but it is not yet a provider-native vector store or managed file-search integration.
+The hub-managed `hub_lexical` backend uses extracted document text. Provider-native backends keep remote store IDs in SQLite and let the selected provider perform semantic file search.
 
 ## Agent Management
 

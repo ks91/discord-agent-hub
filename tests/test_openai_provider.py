@@ -98,6 +98,25 @@ async def test_openai_provider_adds_selected_tools_to_request():
     assert call["tool_choice"] == "auto"
 
 
+async def test_openai_provider_adds_file_search_tool_for_vector_store_metadata():
+    provider = OpenAIResponsesProvider(api_key="test-key", default_model="gpt-5.2")
+    provider.client = FakeOpenAIClient()
+    agent = AgentDefinition(
+        id="gpt-knowledge",
+        name="GPT Knowledge",
+        provider=ProviderKind.OPENAI_RESPONSES,
+        metadata={"openai_vector_store_ids": ["vs_123"]},
+    )
+
+    await provider.generate(agent=agent, conversation=[], provider_session_id=None)
+
+    call = provider.client.responses.calls[0]
+    assert call["tools"] == [
+        {"type": "file_search", "vector_store_ids": ["vs_123"]},
+    ]
+    assert call["tool_choice"] == "auto"
+
+
 async def test_openai_provider_includes_image_attachments_in_user_messages():
     provider = OpenAIResponsesProvider(api_key="test-key", default_model="gpt-5.2")
     provider.client = FakeOpenAIClient()

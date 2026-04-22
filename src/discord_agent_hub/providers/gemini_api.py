@@ -68,7 +68,18 @@ class GeminiAPIProvider(Provider):
             "contents": contents,
         }
         tools = []
-        if agent.tools.get("web_search"):
+        file_search_store_names = agent.metadata.get("gemini_file_search_store_names")
+        if isinstance(file_search_store_names, list) and file_search_store_names:
+            tools.append(
+                {
+                    "file_search": {
+                        "file_search_store_names": [
+                            str(item) for item in file_search_store_names if str(item)
+                        ]
+                    }
+                }
+            )
+        if agent.tools.get("web_search") and not file_search_store_names:
             tools.append({"google_search": {}})
         if agent.tools.get("code_execution"):
             tools.append({"code_execution": {}})

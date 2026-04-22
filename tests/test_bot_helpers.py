@@ -3,8 +3,10 @@ from discord_agent_hub.bot import (
     _agent_update_notification_recipient_ids,
     _attach_knowledge_context,
     _build_agent_choices,
+    _hub_lexical_source_ids_for_provider,
     _knowledge_source_ids,
     _merge_agent_metadata,
+    _native_knowledge_metadata,
     _notify_agent_watchers,
     _send_interaction_split,
 )
@@ -158,6 +160,44 @@ def test_attach_knowledge_context_adds_document_to_latest_user_message():
     assert conversation[0].attachments == []
     assert updated[0].attachments[0]["type"] == "document"
     assert "settlement risk" in updated[0].attachments[0]["text"]
+
+
+def test_native_knowledge_metadata_maps_provider_specific_sources():
+    agent = AgentDefinition(
+        id="gpt-knowledge",
+        name="GPT Knowledge",
+        provider=ProviderKind.OPENAI_RESPONSES,
+        metadata={"knowledge_source_ids": ["papers-openai"]},
+    )
+
+    metadata = _native_knowledge_metadata(
+        agent=agent,
+        sources=[
+            {
+                "id": "papers-openai",
+                "backend": "openai_file_search",
+                "remote_store_id": "vs_123",
+            }
+        ],
+    )
+
+    assert metadata["openai_vector_store_ids"] == ["vs_123"]
+
+
+def test_hub_lexical_source_ids_filters_for_common_backend():
+    agent = AgentDefinition(
+        id="claude-knowledge",
+        name="Claude Knowledge",
+        provider=ProviderKind.ANTHROPIC_MESSAGES,
+    )
+
+    assert _hub_lexical_source_ids_for_provider(
+        agent=agent,
+        sources=[
+            {"id": "shared", "backend": "hub_lexical"},
+            {"id": "gpt-only", "backend": "openai_file_search"},
+        ],
+    ) == ["shared"]
 
 
 class _FakeResponse:

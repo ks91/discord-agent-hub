@@ -54,6 +54,14 @@ class OpenAIResponsesProvider(Provider):
             tools.append({"type": "web_search"})
         if agent.tools.get("code_execution"):
             tools.append({"type": "code_interpreter", "container": {"type": "auto"}})
+        vector_store_ids = agent.metadata.get("openai_vector_store_ids")
+        if isinstance(vector_store_ids, list) and vector_store_ids:
+            tools.append(
+                {
+                    "type": "file_search",
+                    "vector_store_ids": [str(item) for item in vector_store_ids if str(item)],
+                }
+            )
         if tools:
             request["tools"] = tools
             request["tool_choice"] = "auto"

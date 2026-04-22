@@ -7,6 +7,8 @@ from dataclasses import replace
 import json
 import logging
 import mimetypes
+import os
+import tempfile
 import time
 from typing import Iterable
 
@@ -15,6 +17,7 @@ from discord import app_commands
 from discord.ext import commands
 from discord.ui import View
 import httpx
+from openai import AsyncOpenAI
 
 try:
     from openai import APIConnectionError, APITimeoutError, InternalServerError, RateLimitError
@@ -33,6 +36,8 @@ from discord_agent_hub.storage import AgentStore, HubStore
 from discord_agent_hub.structured_log import StructuredLogger
 
 logger = logging.getLogger(__name__)
+
+KNOWLEDGE_BACKENDS = {"hub_lexical", "openai_file_search", "gemini_file_search"}
 
 
 class DiscordAgentHub(commands.Bot):
@@ -281,6 +286,33 @@ def _knowledge_source_ids(agent) -> list[str]:
     return []
 
 
+def _native_knowledge_metadata(*, agent, sources: list[dict]) -> dict:
+    metadata = dict(agent.metadata or {})
+    if agent.provider.value == "openai_responses":
+        vector_store_ids = [
+            source["remote_store_id"]
+            for source in sources
+            if source.get("backend") == "openai_file_search" and source.get("remote_store_id")
+        ]
+        if vector_store_ids:
+            metadata["openai_vector_store_ids"] = vector_store_ids
+    if agent.provider.value == "gemini_api":
+        store_names = [
+            source["remote_store_id"]
+            for source in sources
+            if source.get("backend") == "gemini_file_search" and source.get("remote_store_id")
+        ]
+        if store_names:
+            metadata["gemini_file_search_store_names"] = store_names
+    return metadata
+
+
+def _hub_lexical_source_ids_for_provider(*, agent, sources: list[dict]) -> list[str]:
+    if agent.provider.value not in {"openai_responses", "anthropic_messages", "gemini_api"}:
+        return []
+    return [source["id"] for source in sources if source.get("backend") == "hub_lexical"]
+
+
 def _attach_knowledge_context(
     conversation: list[MessageRecord],
     chunks: list[KnowledgeChunk],
@@ -304,6 +336,74 @@ def _attach_knowledge_context(
         updated = replace(item, attachments=attachments)
         return conversation[:index] + [updated] + conversation[index + 1:]
     return conversation
+
+
+async def _import_openai_file_search_source(
+    *,
+    settings: Settings,
+    source_id: str,
+    filename: str,
+    media_type: str,
+    raw: bytes,
+    remote_store_id: str | None = None,
+) -> str:
+    if not settings.openai_api_key:
+        raise RuntimeError("OPENAI_API_KEY is not configured")
+    client = AsyncOpenAI(api_key=settings.openai_api_key)
+    vector_store_id = remote_store_id
+    if not vector_store_id:
+        vector_store = await client.vector_stores.create(name=source_id)
+        vector_store_id = vector_store.id
+    uploaded_file = await client.files.create(
+        file=(filename, raw, media_type),
+        purpose="assistants",
+    )
+    await client.vector_stores.files.create(
+        vector_store_id=vector_store_id,
+        file_id=uploaded_file.id,
+    )
+    return vector_store_id
+
+
+async def _import_gemini_file_search_source(
+    *,
+    settings: Settings,
+    source_id: str,
+    filename: str,
+    raw: bytes,
+    remote_store_id: str | None = None,
+) -> str:
+    if not settings.gemini_api_key:
+        raise RuntimeError("GEMINI_API_KEY is not configured")
+
+    def import_sync() -> str:
+        try:
+            from google import genai
+        except ImportError as exc:  # pragma: no cover
+            raise RuntimeError("google-genai is required for gemini_file_search imports") from exc
+
+        client = genai.Client(api_key=settings.gemini_api_key)
+        store_name = remote_store_id
+        if not store_name:
+            file_search_store = client.file_search_stores.create(config={"display_name": source_id})
+            store_name = file_search_store.name
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f"-{filename}") as handle:
+            handle.write(raw)
+            temp_name = handle.name
+        try:
+            operation = client.file_search_stores.upload_to_file_search_store(
+                file=temp_name,
+                file_search_store_name=store_name,
+                config={"display_name": filename},
+            )
+            while not operation.done:
+                time.sleep(2)
+                operation = client.operations.get(operation)
+        finally:
+            os.unlink(temp_name)
+        return store_name
+
+    return await asyncio.to_thread(import_sync)
 
 
 def _build_agent_choices(agent_store: AgentStore, current: str) -> list[app_commands.Choice[str]]:
@@ -873,6 +973,7 @@ async def knowledge_import(
     source_id: str,
     file: discord.Attachment,
     overwrite: bool = False,
+    backend: str = "hub_lexical",
 ) -> None:
     bot = interaction.client
     assert isinstance(bot, DiscordAgentHub)
@@ -882,12 +983,44 @@ async def knowledge_import(
     if not is_supported_document(file.filename):
         await interaction.response.send_message("Please upload a supported document file.", ephemeral=True)
         return
+    backend = backend.strip()
+    if backend not in KNOWLEDGE_BACKENDS:
+        await interaction.response.send_message(
+            f"Unknown knowledge backend `{backend}`. Use one of: {', '.join(sorted(KNOWLEDGE_BACKENDS))}.",
+            ephemeral=True,
+        )
+        return
 
     raw = await file.read()
     try:
         text = extract_document_text(filename=file.filename, raw=raw)
     except DocumentExtractionError as exc:
         await interaction.response.send_message(f"Attachment error: {file.filename}: {exc}", ephemeral=True)
+        return
+    existing_sources = bot.hub_store.get_knowledge_sources([source_id])
+    existing_remote_store_id = None if overwrite or not existing_sources else existing_sources[0].get("remote_store_id")
+    remote_store_id = None
+    try:
+        if backend == "openai_file_search":
+            remote_store_id = await _import_openai_file_search_source(
+                settings=bot.settings,
+                source_id=source_id,
+                filename=file.filename,
+                media_type=file.content_type or mimetypes.guess_type(file.filename)[0] or "application/octet-stream",
+                raw=raw,
+                remote_store_id=existing_remote_store_id,
+            )
+        elif backend == "gemini_file_search":
+            remote_store_id = await _import_gemini_file_search_source(
+                settings=bot.settings,
+                source_id=source_id,
+                filename=file.filename,
+                raw=raw,
+                remote_store_id=existing_remote_store_id,
+            )
+    except Exception as exc:
+        logger.exception("Knowledge backend import failed")
+        await interaction.response.send_message(f"Knowledge backend error: {exc}", ephemeral=True)
         return
     try:
         document_id, chunk_count = bot.hub_store.import_knowledge_document(
@@ -897,6 +1030,8 @@ async def knowledge_import(
             text=text,
             created_by_user_id=interaction.user.id,
             overwrite=overwrite,
+            backend=backend,
+            remote_store_id=remote_store_id,
         )
     except ValueError as exc:
         await interaction.response.send_message(str(exc), ephemeral=True)
@@ -910,6 +1045,8 @@ async def knowledge_import(
         chunk_count=chunk_count,
         imported_by_user_id=interaction.user.id,
         overwrite=overwrite,
+        backend=backend,
+        remote_store_id=remote_store_id,
     )
     await interaction.response.send_message(
         "\n".join(
@@ -917,6 +1054,8 @@ async def knowledge_import(
                 f"{'Replaced' if overwrite else 'Imported'} `{file.filename}` into knowledge source `{source_id}`.",
                 f"Document ID: `{document_id}`",
                 f"Chunks: `{chunk_count}`",
+                f"Backend: `{backend}`",
+                f"Remote store: `{remote_store_id or 'none'}`",
             ]
         ),
         ephemeral=True,
@@ -936,7 +1075,9 @@ async def knowledge_list(interaction: discord.Interaction) -> None:
         await interaction.response.send_message("No knowledge sources imported yet.", ephemeral=True)
         return
     lines = [
-        f"- `{source['id']}`: {source['document_count']} documents, {source['chunk_count']} chunks"
+        f"- `{source['id']}`: {source['document_count']} documents, {source['chunk_count']} chunks, "
+        f"backend `{source['backend']}`"
+        + (f", remote `{source['remote_store_id']}`" if source.get("remote_store_id") else "")
         for source in sources
     ]
     await _send_interaction_split(interaction, "\n".join(lines), ephemeral=True)
@@ -1192,8 +1333,9 @@ async def handle_user_message(bot: DiscordAgentHub, message: discord.Message) ->
             conversation = _compact_conversation_for_provider(bot.hub_store.list_messages(session.id))
             source_ids = _knowledge_source_ids(agent)
             if source_ids:
+                sources = bot.hub_store.get_knowledge_sources(source_ids)
                 retrieved_chunks = bot.hub_store.retrieve_knowledge_chunks(
-                    source_ids=source_ids,
+                    source_ids=_hub_lexical_source_ids_for_provider(agent=agent, sources=sources),
                     query=message.content,
                     limit=5,
                 )
@@ -1206,6 +1348,9 @@ async def handle_user_message(bot: DiscordAgentHub, message: discord.Message) ->
                         source_ids=source_ids,
                         chunk_ids=[chunk.id for chunk in retrieved_chunks],
                     )
+                native_metadata = _native_knowledge_metadata(agent=agent, sources=sources)
+                if native_metadata != agent.metadata:
+                    agent = replace(agent, metadata=native_metadata)
             try:
                 response = await _generate_with_retry(
                     bot=bot,

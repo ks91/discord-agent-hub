@@ -197,6 +197,8 @@ class HubStore:
 
                 create table if not exists knowledge_sources (
                     id text primary key,
+                    backend text not null default 'hub_lexical',
+                    remote_store_id text,
                     created_by_user_id integer,
                     created_at text not null
                 );
@@ -225,6 +227,13 @@ class HubStore:
             }
             if "attachments" not in existing_columns:
                 conn.execute("alter table messages add column attachments text not null default '[]'")
+            source_columns = {
+                row["name"] for row in conn.execute("pragma table_info(knowledge_sources)").fetchall()
+            }
+            if "backend" not in source_columns:
+                conn.execute("alter table knowledge_sources add column backend text not null default 'hub_lexical'")
+            if "remote_store_id" not in source_columns:
+                conn.execute("alter table knowledge_sources add column remote_store_id text")
 
     def create_session(
         self,
@@ -326,10 +335,13 @@ class HubStore:
         text: str,
         created_by_user_id: int | None,
         overwrite: bool = False,
+        backend: str = "hub_lexical",
+        remote_store_id: str | None = None,
     ) -> tuple[str, int]:
         source_id = source_id.strip()
         if not source_id:
             raise ValueError("source_id is required")
+        backend = backend.strip() or "hub_lexical"
         document_id = str(uuid.uuid4())
         created_at = utc_now()
         chunks = split_text_into_chunks(text)
@@ -340,11 +352,13 @@ class HubStore:
                 conn.execute("delete from knowledge_sources where id = ?", (source_id,))
             conn.execute(
                 """
-                insert into knowledge_sources (id, created_by_user_id, created_at)
-                values (?, ?, ?)
-                on conflict(id) do nothing
+                insert into knowledge_sources (id, backend, remote_store_id, created_by_user_id, created_at)
+                values (?, ?, ?, ?, ?)
+                on conflict(id) do update set
+                    backend = excluded.backend,
+                    remote_store_id = coalesce(excluded.remote_store_id, knowledge_sources.remote_store_id)
                 """,
-                (source_id, created_by_user_id, created_at),
+                (source_id, backend, remote_store_id, created_by_user_id, created_at),
             )
             conn.execute(
                 """
@@ -369,6 +383,8 @@ class HubStore:
                 """
                 select
                     s.id,
+                    s.backend,
+                    s.remote_store_id,
                     s.created_by_user_id,
                     s.created_at,
                     count(distinct d.id) as document_count,
@@ -376,11 +392,27 @@ class HubStore:
                 from knowledge_sources s
                 left join knowledge_documents d on d.source_id = s.id
                 left join knowledge_chunks c on c.source_id = s.id
-                group by s.id, s.created_by_user_id, s.created_at
+                group by s.id, s.backend, s.remote_store_id, s.created_by_user_id, s.created_at
                 order by s.id asc
                 """
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def get_knowledge_sources(self, source_ids: list[str]) -> list[dict]:
+        if not source_ids:
+            return []
+        placeholders = ",".join("?" for _ in source_ids)
+        with self._connect() as conn:
+            rows = conn.execute(
+                f"""
+                select id, backend, remote_store_id, created_by_user_id, created_at
+                from knowledge_sources
+                where id in ({placeholders})
+                """,
+                tuple(source_ids),
+            ).fetchall()
+        by_id = {row["id"]: dict(row) for row in rows}
+        return [by_id[source_id] for source_id in source_ids if source_id in by_id]
 
     def retrieve_knowledge_chunks(
         self,

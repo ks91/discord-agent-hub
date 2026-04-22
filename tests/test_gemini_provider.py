@@ -129,6 +129,40 @@ async def test_gemini_provider_adds_selected_tools_to_request():
     ]
 
 
+async def test_gemini_provider_adds_file_search_tool_for_store_metadata():
+    captured = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured["json"] = json.loads(request.content.decode("utf-8"))
+        return httpx.Response(
+            200,
+            json={"candidates": [{"content": {"parts": [{"text": "done"}]}}]},
+        )
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://generativelanguage.googleapis.com",
+    )
+    provider = GeminiAPIProvider(
+        api_key="gemini-key",
+        default_model="gemini-2.5-pro",
+        http_client=client,
+    )
+    agent = AgentDefinition(
+        id="gemini-knowledge",
+        name="Gemini Knowledge",
+        provider=ProviderKind.GEMINI_API,
+        tools={"web_search": True},
+        metadata={"gemini_file_search_store_names": ["fileSearchStores/store-1"]},
+    )
+
+    await provider.generate(agent=agent, conversation=[], provider_session_id=None)
+
+    assert captured["json"]["tools"] == [
+        {"file_search": {"file_search_store_names": ["fileSearchStores/store-1"]}},
+    ]
+
+
 async def test_gemini_provider_includes_image_attachments_in_user_messages():
     captured = {}
 

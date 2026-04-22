@@ -118,6 +118,8 @@ def test_hub_store_imports_and_retrieves_knowledge_chunks(tmp_path):
     assert sources == [
         {
             "id": "quiz-source",
+            "backend": "hub_lexical",
+            "remote_store_id": None,
             "created_by_user_id": 123,
             "created_at": sources[0]["created_at"],
             "document_count": 1,
@@ -166,3 +168,22 @@ def test_hub_store_overwrites_whole_knowledge_source(tmp_path):
     )
     assert [chunk.filename for chunk in chunks] == ["new.md"]
     assert "new cyber physical notes" in chunks[0].text
+
+
+def test_hub_store_records_knowledge_backend_and_remote_store(tmp_path):
+    store = HubStore(tmp_path / "hub.sqlite3")
+
+    store.import_knowledge_document(
+        source_id="gpt-papers-openai",
+        filename="paper.pdf",
+        media_type="application/pdf",
+        text="semantic retrieval",
+        created_by_user_id=123,
+        backend="openai_file_search",
+        remote_store_id="vs_123",
+    )
+
+    source = store.get_knowledge_sources(["gpt-papers-openai"])[0]
+
+    assert source["backend"] == "openai_file_search"
+    assert source["remote_store_id"] == "vs_123"
