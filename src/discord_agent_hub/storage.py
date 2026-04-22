@@ -325,6 +325,7 @@ class HubStore:
         media_type: str,
         text: str,
         created_by_user_id: int | None,
+        overwrite: bool = False,
     ) -> tuple[str, int]:
         source_id = source_id.strip()
         if not source_id:
@@ -333,6 +334,10 @@ class HubStore:
         created_at = utc_now()
         chunks = split_text_into_chunks(text)
         with self._connect() as conn:
+            if overwrite:
+                conn.execute("delete from knowledge_chunks where source_id = ?", (source_id,))
+                conn.execute("delete from knowledge_documents where source_id = ?", (source_id,))
+                conn.execute("delete from knowledge_sources where id = ?", (source_id,))
             conn.execute(
                 """
                 insert into knowledge_sources (id, created_by_user_id, created_at)

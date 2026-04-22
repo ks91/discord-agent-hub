@@ -134,3 +134,35 @@ def test_hub_store_imports_and_retrieves_knowledge_chunks(tmp_path):
     assert chunks[0].source_id == "quiz-source"
     assert chunks[0].filename == "notes.md"
     assert "決済インフラ" in chunks[0].text
+
+
+def test_hub_store_overwrites_whole_knowledge_source(tmp_path):
+    store = HubStore(tmp_path / "hub.sqlite3")
+    store.import_knowledge_document(
+        source_id="quiz-source",
+        filename="old.md",
+        media_type="text/markdown",
+        text="old settlement notes",
+        created_by_user_id=123,
+    )
+
+    document_id, chunk_count = store.import_knowledge_document(
+        source_id="quiz-source",
+        filename="new.md",
+        media_type="text/markdown",
+        text="new cyber physical notes",
+        created_by_user_id=456,
+        overwrite=True,
+    )
+
+    assert document_id
+    assert chunk_count == 1
+    sources = store.list_knowledge_sources()
+    assert sources[0]["document_count"] == 1
+    chunks = store.retrieve_knowledge_chunks(
+        source_ids=["quiz-source"],
+        query="settlement cyber physical",
+        limit=10,
+    )
+    assert [chunk.filename for chunk in chunks] == ["new.md"]
+    assert "new cyber physical notes" in chunks[0].text

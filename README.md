@@ -230,6 +230,14 @@ Import a source with:
 /knowledge-import source_id:finance-notes file:(notes.pdf)
 ```
 
+Use `overwrite:true` to replace the whole knowledge source with the uploaded file:
+
+```text
+/knowledge-import source_id:finance-notes file:(notes.pdf) overwrite:true
+```
+
+Without `overwrite:true`, importing another file with the same `source_id` appends that document to the existing source.
+
 List sources with:
 
 ```text

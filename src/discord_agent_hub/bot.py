@@ -862,11 +862,13 @@ class DeleteAgentConfirmView(View):
 @app_commands.describe(
     source_id="Knowledge source ID to create or extend",
     file="Document file to extract and index",
+    overwrite="Replace the whole knowledge source before importing this file",
 )
 async def knowledge_import(
     interaction: discord.Interaction,
     source_id: str,
     file: discord.Attachment,
+    overwrite: bool = False,
 ) -> None:
     bot = interaction.client
     assert isinstance(bot, DiscordAgentHub)
@@ -890,6 +892,7 @@ async def knowledge_import(
             media_type=file.content_type or mimetypes.guess_type(file.filename)[0] or "application/octet-stream",
             text=text,
             created_by_user_id=interaction.user.id,
+            overwrite=overwrite,
         )
     except ValueError as exc:
         await interaction.response.send_message(str(exc), ephemeral=True)
@@ -902,11 +905,12 @@ async def knowledge_import(
         filename=file.filename,
         chunk_count=chunk_count,
         imported_by_user_id=interaction.user.id,
+        overwrite=overwrite,
     )
     await interaction.response.send_message(
         "\n".join(
             [
-                f"Imported `{file.filename}` into knowledge source `{source_id}`.",
+                f"{'Replaced' if overwrite else 'Imported'} `{file.filename}` into knowledge source `{source_id}`.",
                 f"Document ID: `{document_id}`",
                 f"Chunks: `{chunk_count}`",
             ]
