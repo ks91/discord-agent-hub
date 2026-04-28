@@ -6,6 +6,7 @@ import httpx
 
 from discord_agent_hub.conversation_render import render_message_text
 from discord_agent_hub.models import AgentDefinition, MessageRecord, ProviderResponse
+from discord_agent_hub.provider_instructions import render_provider_instructions
 from discord_agent_hub.providers.base import Provider
 
 
@@ -63,7 +64,7 @@ class GeminiAPIProvider(Provider):
 
         payload = {
             "systemInstruction": {
-                "parts": [{"text": agent.instructions or "You are a helpful assistant."}]
+                "parts": [{"text": render_provider_instructions(agent)}]
             },
             "contents": contents,
         }

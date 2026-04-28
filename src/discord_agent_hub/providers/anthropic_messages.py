@@ -6,6 +6,7 @@ import httpx
 
 from discord_agent_hub.conversation_render import render_message_text
 from discord_agent_hub.models import AgentDefinition, MessageRecord, ProviderResponse
+from discord_agent_hub.provider_instructions import render_provider_instructions
 from discord_agent_hub.providers.base import Provider
 
 
@@ -67,7 +68,7 @@ class AnthropicMessagesProvider(Provider):
             "model": agent.model or self.default_model,
             "max_tokens": 4096,
             "cache_control": {"type": "ephemeral"},
-            "system": agent.instructions or "You are a helpful assistant.",
+            "system": render_provider_instructions(agent),
             "messages": messages,
         }
         tools = []

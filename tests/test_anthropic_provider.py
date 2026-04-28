@@ -3,6 +3,7 @@ import json
 import httpx
 
 from discord_agent_hub.models import AgentDefinition, MessageRecord, ProviderKind
+from discord_agent_hub.provider_instructions import CODE_EXECUTION_CAPABILITY_NOTE
 from discord_agent_hub.providers.anthropic_messages import AnthropicMessagesProvider
 
 
@@ -175,6 +176,7 @@ async def test_anthropic_provider_adds_selected_tools_and_beta_header():
         {"type": "code_execution_20250825", "name": "code_execution"},
     ]
     assert captured["headers"]["anthropic-beta"] == "code-execution-2025-08-25"
+    assert CODE_EXECUTION_CAPABILITY_NOTE in captured["json"]["system"]
 
 
 async def test_anthropic_provider_includes_image_attachments_in_user_messages():

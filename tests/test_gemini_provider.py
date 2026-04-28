@@ -3,6 +3,7 @@ import json
 import httpx
 
 from discord_agent_hub.models import AgentDefinition, MessageRecord, ProviderKind
+from discord_agent_hub.provider_instructions import CODE_EXECUTION_CAPABILITY_NOTE
 from discord_agent_hub.providers.gemini_api import GeminiAPIProvider
 
 
@@ -148,6 +149,8 @@ async def test_gemini_provider_adds_selected_tools_to_request():
         {"google_search": {}},
         {"code_execution": {}},
     ]
+    system_text = captured["json"]["systemInstruction"]["parts"][0]["text"]
+    assert CODE_EXECUTION_CAPABILITY_NOTE in system_text
 
 
 async def test_gemini_provider_adds_file_search_tool_for_store_metadata():

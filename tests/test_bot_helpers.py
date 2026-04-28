@@ -14,6 +14,7 @@ from discord_agent_hub.knowledge import KnowledgeChunk
 from discord_agent_hub.models import MessageRecord
 from discord_agent_hub.config import Settings
 from discord_agent_hub.models import AgentDefinition, ProviderKind
+from discord_agent_hub.provider_instructions import CODE_EXECUTION_CAPABILITY_NOTE
 from discord_agent_hub.storage import AgentStore
 
 
@@ -92,6 +93,21 @@ def test_agent_show_lines_can_show_full_instructions():
     lines = _agent_show_lines(agent=agent, full=True)
 
     assert lines[-1] == "x" * 1500
+
+
+def test_agent_show_lines_full_includes_code_execution_note():
+    agent = AgentDefinition(
+        id="code-agent",
+        name="Code Agent",
+        provider=ProviderKind.OPENAI_RESPONSES,
+        instructions="Use tools when useful.",
+        tools={"code_execution": True},
+    )
+
+    lines = _agent_show_lines(agent=agent, full=True)
+
+    assert "Hub-injected capability note:" in lines
+    assert CODE_EXECUTION_CAPABILITY_NOTE in lines
 
 
 def test_agent_show_lines_includes_knowledge_sources():

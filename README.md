@@ -311,6 +311,8 @@ The import format also supports:
 - `tools.web_search: true|false`
 - `tools.code_execution: true|false`
 
+When `tools.code_execution: true` is set, the hub adds a short provider-side capability note to the request instructions. The note tells the model that cloud-side code execution is available when useful, without requiring code execution for every answer. `/agent-show-full` displays this hub-injected note so authors can see the effective prompt context.
+
 This is useful for quizzes, simulations, or puzzle agents where users should not see the full hidden instructions.
 
 A minimal importable example looks like this:

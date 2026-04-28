@@ -4,6 +4,7 @@ from openai import AsyncOpenAI
 
 from discord_agent_hub.conversation_render import render_message_text
 from discord_agent_hub.models import AgentDefinition, MessageRecord, ProviderResponse
+from discord_agent_hub.provider_instructions import render_provider_instructions
 from discord_agent_hub.providers.base import Provider
 
 
@@ -19,7 +20,7 @@ class OpenAIResponsesProvider(Provider):
         conversation: list[MessageRecord],
         provider_session_id: str | None,
     ) -> ProviderResponse:
-        instructions = agent.instructions or "You are a helpful assistant."
+        instructions = render_provider_instructions(agent)
         input_items = []
         for item in conversation:
             if item.role == "system":

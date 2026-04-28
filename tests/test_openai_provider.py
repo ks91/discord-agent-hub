@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from discord_agent_hub.models import AgentDefinition, MessageRecord, ProviderKind
+from discord_agent_hub.provider_instructions import CODE_EXECUTION_CAPABILITY_NOTE
 from discord_agent_hub.providers.openai_responses import OpenAIResponsesProvider
 
 
@@ -117,6 +118,7 @@ async def test_openai_provider_adds_selected_tools_to_request():
         {"type": "code_interpreter", "container": {"type": "auto"}},
     ]
     assert call["tool_choice"] == "auto"
+    assert CODE_EXECUTION_CAPABILITY_NOTE in call["instructions"]
 
 
 async def test_openai_provider_adds_file_search_tool_for_vector_store_metadata():

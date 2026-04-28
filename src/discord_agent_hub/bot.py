@@ -31,6 +31,7 @@ from discord_agent_hub.config import Settings
 from discord_agent_hub.document_extract import DocumentExtractionError, extract_document_text, is_supported_document
 from discord_agent_hub.knowledge import KnowledgeChunk, build_knowledge_context
 from discord_agent_hub.models import MessageRecord, utc_now
+from discord_agent_hub.provider_instructions import CODE_EXECUTION_CAPABILITY_NOTE
 from discord_agent_hub.providers.base import ProviderRegistry
 from discord_agent_hub.storage import AgentStore, HubStore
 from discord_agent_hub.structured_log import StructuredLogger
@@ -574,6 +575,10 @@ def _agent_show_lines(*, agent, full: bool) -> list[str]:
         lines.append(instructions_text)
     else:
         lines.append("(hidden for this agent)")
+    if full and agent.tools.get("code_execution"):
+        lines.append("")
+        lines.append("Hub-injected capability note:")
+        lines.append(CODE_EXECUTION_CAPABILITY_NOTE)
     return lines
 
 
