@@ -187,3 +187,45 @@ def test_hub_store_records_knowledge_backend_and_remote_store(tmp_path):
 
     assert source["backend"] == "openai_file_search"
     assert source["remote_store_id"] == "vs_123"
+
+
+def test_hub_store_lists_knowledge_documents(tmp_path):
+    store = HubStore(tmp_path / "hub.sqlite3")
+
+    first_id, first_chunks = store.import_knowledge_document(
+        source_id="course-source",
+        filename="first.md",
+        media_type="text/markdown",
+        text="first notes",
+        created_by_user_id=123,
+    )
+    second_id, second_chunks = store.import_knowledge_document(
+        source_id="course-source",
+        filename="second.txt",
+        media_type="text/plain",
+        text="second notes",
+        created_by_user_id=123,
+    )
+
+    documents = store.list_knowledge_documents("course-source")
+
+    assert documents == [
+        {
+            "id": first_id,
+            "source_id": "course-source",
+            "filename": "first.md",
+            "media_type": "text/markdown",
+            "created_at": documents[0]["created_at"],
+            "text_chars": len("first notes"),
+            "chunk_count": first_chunks,
+        },
+        {
+            "id": second_id,
+            "source_id": "course-source",
+            "filename": "second.txt",
+            "media_type": "text/plain",
+            "created_at": documents[1]["created_at"],
+            "text_chars": len("second notes"),
+            "chunk_count": second_chunks,
+        },
+    ]

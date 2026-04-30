@@ -3,6 +3,7 @@ from discord_agent_hub.bot import (
     _agent_update_notification_recipient_ids,
     _attach_knowledge_context,
     _build_agent_choices,
+    _build_knowledge_source_choices,
     _hub_lexical_source_ids_for_provider,
     _knowledge_source_ids,
     _merge_agent_metadata,
@@ -15,7 +16,7 @@ from discord_agent_hub.models import MessageRecord
 from discord_agent_hub.config import Settings
 from discord_agent_hub.models import AgentDefinition, ProviderKind
 from discord_agent_hub.provider_instructions import CODE_EXECUTION_CAPABILITY_NOTE
-from discord_agent_hub.storage import AgentStore
+from discord_agent_hub.storage import AgentStore, HubStore
 
 
 def test_build_agent_choices_returns_limited_results(tmp_path):
@@ -36,6 +37,28 @@ def test_build_agent_choices_filters_by_id_or_name(tmp_path):
 
     assert [choice.value for choice in id_matches] == ["claude-default"]
     assert [choice.value for choice in name_matches] == ["gemini-default"]
+
+
+def test_build_knowledge_source_choices_filters_by_id(tmp_path):
+    store = HubStore(tmp_path / "hub.sqlite3")
+    store.import_knowledge_document(
+        source_id="finance-notes",
+        filename="notes.md",
+        media_type="text/markdown",
+        text="settlement risk",
+        created_by_user_id=123,
+    )
+    store.import_knowledge_document(
+        source_id="science-camp",
+        filename="camp.md",
+        media_type="text/markdown",
+        text="experiment",
+        created_by_user_id=123,
+    )
+
+    choices = _build_knowledge_source_choices(store, "finance")
+
+    assert [choice.value for choice in choices] == ["finance-notes"]
 
 
 def test_settings_parse_dev_guild_id(tmp_path):

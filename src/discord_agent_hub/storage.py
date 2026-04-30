@@ -414,6 +414,28 @@ class HubStore:
         by_id = {row["id"]: dict(row) for row in rows}
         return [by_id[source_id] for source_id in source_ids if source_id in by_id]
 
+    def list_knowledge_documents(self, source_id: str) -> list[dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                select
+                    d.id,
+                    d.source_id,
+                    d.filename,
+                    d.media_type,
+                    d.created_at,
+                    length(d.text) as text_chars,
+                    count(c.id) as chunk_count
+                from knowledge_documents d
+                left join knowledge_chunks c on c.document_id = d.id
+                where d.source_id = ?
+                group by d.id, d.source_id, d.filename, d.media_type, d.created_at, d.text
+                order by d.created_at asc, d.filename asc
+                """,
+                (source_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def retrieve_knowledge_chunks(
         self,
         *,

@@ -71,6 +71,7 @@ class DiscordAgentHub(commands.Bot):
         self.tree.add_command(agent_show_full)
         self.tree.add_command(knowledge_import)
         self.tree.add_command(knowledge_list)
+        self.tree.add_command(knowledge_show)
         self.tree.add_command(hub_status)
         self.tree.add_command(chat)
         self.tree.add_command(session_show)
@@ -422,6 +423,24 @@ def _build_agent_choices(agent_store: AgentStore, current: str) -> list[app_comm
             value=agent.id,
         )
         for agent in list(matches)[:25]
+    ]
+
+
+def _build_knowledge_source_choices(hub_store: HubStore, current: str) -> list[app_commands.Choice[str]]:
+    current_lower = current.lower().strip()
+    sources: Iterable[dict] = hub_store.list_knowledge_sources()
+    if current_lower:
+        sources = [
+            source
+            for source in sources
+            if current_lower in str(source["id"]).lower()
+        ]
+    return [
+        app_commands.Choice(
+            name=f"{source['id']} [{source['backend']}]",
+            value=str(source["id"]),
+        )
+        for source in list(sources)[:25]
     ]
 
 
@@ -1098,6 +1117,54 @@ async def knowledge_list(interaction: discord.Interaction) -> None:
         for source in sources
     ]
     await _send_interaction_split(interaction, "\n".join(lines), ephemeral=True)
+
+
+@app_commands.command(name="knowledge-show", description="Show documents in a knowledge source")
+@app_commands.describe(source_id="Knowledge source ID to inspect")
+async def knowledge_show(interaction: discord.Interaction, source_id: str) -> None:
+    bot = interaction.client
+    assert isinstance(bot, DiscordAgentHub)
+    if not bot.guild_allowed(interaction.guild):
+        await interaction.response.send_message("This server is not allowed.", ephemeral=True)
+        return
+
+    sources = bot.hub_store.get_knowledge_sources([source_id])
+    if not sources:
+        await interaction.response.send_message(
+            f"Unknown knowledge source: `{source_id}`. Use `/knowledge-list` to see valid sources.",
+            ephemeral=True,
+        )
+        return
+
+    source = sources[0]
+    documents = bot.hub_store.list_knowledge_documents(source_id)
+    lines = [
+        f"ID: `{source['id']}`",
+        f"Backend: `{source['backend']}`",
+        f"Remote store: `{source.get('remote_store_id') or 'none'}`",
+        f"Created at: `{source['created_at']}`",
+        f"Created by user ID: `{source.get('created_by_user_id') or 'unknown'}`",
+        "",
+        "Documents:",
+    ]
+    if not documents:
+        lines.append("(none)")
+    for document in documents:
+        lines.append(
+            f"- `{document['filename']}`: {document['media_type']}, "
+            f"{document['text_chars']} chars, {document['chunk_count']} chunks, "
+            f"created `{document['created_at']}`"
+        )
+    await _send_interaction_split(interaction, "\n".join(lines), ephemeral=True)
+
+
+@knowledge_show.autocomplete("source_id")
+async def knowledge_show_source_id_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    bot = interaction.client
+    assert isinstance(bot, DiscordAgentHub)
+    return _build_knowledge_source_choices(bot.hub_store, current)
 
 
 @app_commands.command(name="hub-status", description="Show configured providers and defaults")

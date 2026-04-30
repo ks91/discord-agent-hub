@@ -134,6 +134,7 @@ When this is set, commands are synced to that guild immediately instead of waiti
 - `/agent-delete`: deletes an agent definition after confirmation
 - `/knowledge-import`: imports a document into a reusable knowledge source
 - `/knowledge-list`: lists imported knowledge sources
+- `/knowledge-show`: shows the documents registered in a knowledge source
 - `/session-show`: shows the current thread's session metadata and token totals
 - `/log-export`: exports the current session transcript and JSONL events
 - `/usage-report`: shows a lightweight usage summary for the current server
@@ -261,6 +262,12 @@ List sources with:
 
 ```text
 /knowledge-list
+```
+
+Show the files registered in a source with:
+
+```text
+/knowledge-show source_id:finance-notes
 ```
 
 To bind an agent to a knowledge source, add `knowledge_sources` to the agent Markdown block:
