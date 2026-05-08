@@ -1,7 +1,7 @@
 import asyncio
 from types import SimpleNamespace
 
-from discord_agent_hub.bot import _compact_conversation_for_provider, handle_user_message
+from discord_agent_hub.bot import _compact_conversation_for_provider, _extract_latex_source, handle_user_message
 from discord_agent_hub.models import ProviderResponse
 from discord_agent_hub.models import MessageRecord
 from discord_agent_hub.providers.base import ProviderRegistry
@@ -74,9 +74,12 @@ class FakeChannel:
     def __init__(self, channel_id: int) -> None:
         self.id = channel_id
         self.sent_messages = []
+        self.sent_files = []
 
-    async def send(self, content: str) -> None:
+    async def send(self, content: str, file=None) -> None:
         self.sent_messages.append(content)
+        if file is not None:
+            self.sent_files.append(file)
 
 
 def _build_fake_bot(tmp_path, provider_name: str, provider) -> SimpleNamespace:
@@ -167,6 +170,52 @@ async def test_handle_user_message_reports_provider_error(tmp_path):
     assert channel.sent_messages == ["Provider error: provider exploded"]
     event_log = (tmp_path / "events.jsonl").read_text(encoding="utf-8")
     assert "provider.error" in event_log
+
+
+async def test_handle_user_message_attaches_latex_source_when_present(tmp_path):
+    provider = FakeProvider(
+        ProviderResponse(
+            output_text=(
+                "Here is the source:\n\n"
+                "```latex\n"
+                "\\documentclass{article}\n"
+                "\\begin{document}\n"
+                "Hello\n"
+                "\\end{document}\n"
+                "```"
+            ),
+            provider_session_id=None,
+            raw_payload={"ok": True},
+        )
+    )
+    bot = _build_fake_bot(tmp_path, "openai_responses", provider)
+    session = bot.hub_store.create_session(
+        agent_id="gpt-default",
+        provider="openai_responses",
+        discord_channel_id=100,
+        discord_thread_id=200,
+        discord_guild_id=300,
+        created_by_user_id=400,
+    )
+    channel = FakeChannel(200)
+    message = SimpleNamespace(
+        author=SimpleNamespace(id=123, display_name="alice"),
+        content="make latex",
+        channel=channel,
+    )
+
+    await handle_user_message(bot, message)
+
+    assert channel.sent_messages[-1] == "LaTeX source attached."
+    assert len(channel.sent_files) == 1
+    assert channel.sent_files[0].filename == f"{session.id}-latex-source.tex"
+    channel.sent_files[0].fp.seek(0)
+    assert channel.sent_files[0].fp.read().decode("utf-8") == (
+        "\\documentclass{article}\n"
+        "\\begin{document}\n"
+        "Hello\n"
+        "\\end{document}\n"
+    )
 
 
 async def test_handle_user_message_serializes_same_thread_requests(tmp_path):
@@ -299,6 +348,14 @@ async def test_handle_user_message_blocks_disallowed_roles(tmp_path):
     assert channel.sent_messages == ["You are not allowed to use AI chat in this server."]
     event_log = (tmp_path / "events.jsonl").read_text(encoding="utf-8")
     assert "auth.denied_role" in event_log
+
+
+def test_extract_latex_source_combines_latex_and_tex_blocks():
+    source = _extract_latex_source(
+        "A\n```latex\n\\documentclass{article}\n```\nB\n```tex\n\\section{X}\n```"
+    )
+
+    assert source == "\\documentclass{article}\n\n\\section{X}\n"
 
 
 def test_compact_conversation_keeps_only_latest_user_image():

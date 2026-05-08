@@ -215,6 +215,10 @@ For PDF extraction, the hub now prefers the external `pdftotext` command when av
 
 This keeps the implementation provider-agnostic while already supporting common workflows such as summarizing papers, notes, slides, and spreadsheets.
 
+## Generated LaTeX
+
+When an agent response contains a fenced `latex` or `tex` code block, the hub also attaches the extracted source as a downloadable `.tex` file. This is useful for agents that draft LaTeX manuscripts, tables, or slides.
+
 ## Knowledge Sources
 
 Knowledge sources are reusable document collections that agents can retrieve from during chat.

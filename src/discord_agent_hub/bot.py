@@ -8,6 +8,7 @@ import json
 import logging
 import mimetypes
 import os
+import re
 import tempfile
 import time
 from typing import Iterable
@@ -94,6 +95,27 @@ async def _send_split(thread: discord.Thread, content: str) -> None:
     chunks = [content[i:i + 1800] for i in range(0, len(content), 1800)] or [""]
     for chunk in chunks:
         await thread.send(chunk)
+
+
+LATEX_CODE_BLOCK_RE = re.compile(r"```(?:latex|tex)\s*\n(.*?)```", re.IGNORECASE | re.DOTALL)
+
+
+def _extract_latex_source(text: str) -> str | None:
+    blocks = [match.strip() for match in LATEX_CODE_BLOCK_RE.findall(text) if match.strip()]
+    if not blocks:
+        return None
+    return "\n\n".join(blocks).strip() + "\n"
+
+
+async def _send_latex_source_download(thread: discord.Thread, content: str, *, filename: str) -> bool:
+    latex_source = _extract_latex_source(content)
+    if not latex_source:
+        return False
+    await thread.send(
+        "LaTeX source attached.",
+        file=discord.File(BytesIO(latex_source.encode("utf-8")), filename=filename),
+    )
+    return True
 
 
 async def _send_interaction_split(interaction: discord.Interaction, content: str, *, ephemeral: bool = True) -> None:
@@ -1484,6 +1506,20 @@ async def handle_user_message(bot: DiscordAgentHub, message: discord.Message) ->
                 raw_payload=response.raw_payload,
             )
             await _send_split(message.channel, response.output_text)
+            attached_latex = await _send_latex_source_download(
+                message.channel,
+                response.output_text,
+                filename=f"{session.id}-latex-source.tex",
+            )
+            if attached_latex:
+                bot.structured_logger.append(
+                    "response.attachment",
+                    session_id=session.id,
+                    provider=session.provider,
+                    agent_id=agent.id,
+                    filename=f"{session.id}-latex-source.tex",
+                    media_type="text/x-tex",
+                )
     finally:
         remaining = queue_depths.get(thread_id, 1) - 1
         if remaining <= 0:
