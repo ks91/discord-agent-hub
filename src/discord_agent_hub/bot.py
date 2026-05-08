@@ -1419,6 +1419,15 @@ async def handle_user_message(bot: DiscordAgentHub, message: discord.Message) ->
             except RuntimeError as exc:
                 await message.channel.send(f"Attachment error: {exc}")
                 return
+            if not (message.content or "").strip() and not attachments:
+                bot.structured_logger.append(
+                    "message.empty_ignored",
+                    session_id=session.id,
+                    discord_thread_id=message.channel.id,
+                    author_id=message.author.id,
+                    original_attachment_count=len(getattr(message, "attachments", []) or []),
+                )
+                return
 
             user_record = MessageRecord(
                 session_id=session.id,

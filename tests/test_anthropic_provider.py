@@ -291,6 +291,53 @@ async def test_anthropic_provider_omits_empty_text_when_image_only():
     ]
 
 
+async def test_anthropic_provider_skips_empty_history_items():
+    captured = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured["json"] = json.loads(request.content.decode("utf-8"))
+        return httpx.Response(200, json={"content": [{"type": "text", "text": "done"}]})
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://api.anthropic.com",
+    )
+    provider = AnthropicMessagesProvider(
+        api_key="test-key",
+        default_model="claude-sonnet-4-0",
+        http_client=client,
+    )
+    agent = AgentDefinition(
+        id="claude-default",
+        name="Claude Default",
+        provider=ProviderKind.ANTHROPIC_MESSAGES,
+    )
+    conversation = [
+        MessageRecord(
+            session_id="s1",
+            role="user",
+            author_id=1,
+            author_name="alice",
+            content="",
+            created_at="2026-04-06T00:00:00+00:00",
+        ),
+        MessageRecord(
+            session_id="s1",
+            role="user",
+            author_id=1,
+            author_name="alice",
+            content="Hello",
+            created_at="2026-04-06T00:00:01+00:00",
+        ),
+    ]
+
+    await provider.generate(agent=agent, conversation=conversation, provider_session_id=None)
+
+    assert captured["json"]["messages"] == [
+        {"role": "user", "content": [{"type": "text", "text": "alice: Hello"}]}
+    ]
+
+
 async def test_anthropic_provider_renders_document_attachments_as_text():
     captured = {}
 

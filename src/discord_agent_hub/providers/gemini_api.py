@@ -55,6 +55,8 @@ class GeminiAPIProvider(Provider):
             text = render_message_text(item)
             if text.strip() or not parts:
                 parts.append({"text": text})
+            if not any(part.get("text", "").strip() or "inline_data" in part for part in parts):
+                continue
             contents.append(
                 {
                     "role": role,

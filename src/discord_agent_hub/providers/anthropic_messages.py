@@ -57,6 +57,8 @@ class AnthropicMessagesProvider(Provider):
             text = render_message_text(item)
             if text.strip() or not content:
                 content.append({"type": "text", "text": text})
+            if not any(part.get("text", "").strip() or part.get("type") == "image" for part in content):
+                continue
             messages.append(
                 {
                     "role": role,

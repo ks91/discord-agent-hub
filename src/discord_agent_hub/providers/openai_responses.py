@@ -38,6 +38,8 @@ class OpenAIResponsesProvider(Provider):
             text = render_message_text(item)
             if text.strip() or not content:
                 content.append({"type": content_type, "text": text})
+            if not any(part.get("text", "").strip() or part.get("type") == "input_image" for part in content):
+                continue
             input_items.append(
                 {
                     "role": role,

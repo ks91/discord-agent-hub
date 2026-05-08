@@ -172,6 +172,84 @@ async def test_handle_user_message_reports_provider_error(tmp_path):
     assert "provider.error" in event_log
 
 
+async def test_handle_user_message_ignores_empty_message_without_attachments(tmp_path):
+    provider = FakeProvider(
+        ProviderResponse(
+            output_text="assistant reply",
+            provider_session_id=None,
+            raw_payload={"ok": True},
+        )
+    )
+    bot = _build_fake_bot(tmp_path, "openai_responses", provider)
+    session = bot.hub_store.create_session(
+        agent_id="gpt-default",
+        provider="openai_responses",
+        discord_channel_id=100,
+        discord_thread_id=200,
+        discord_guild_id=300,
+        created_by_user_id=400,
+    )
+    channel = FakeChannel(200)
+    message = SimpleNamespace(
+        author=SimpleNamespace(id=123, display_name="alice"),
+        content="   ",
+        attachments=[],
+        channel=channel,
+    )
+
+    await handle_user_message(bot, message)
+
+    assert provider.calls == []
+    assert bot.hub_store.list_messages(session.id) == []
+    assert channel.sent_messages == []
+    event_log = (tmp_path / "events.jsonl").read_text(encoding="utf-8")
+    assert "message.empty_ignored" in event_log
+
+
+async def test_handle_user_message_ignores_empty_message_with_unsupported_attachment(tmp_path):
+    provider = FakeProvider(
+        ProviderResponse(
+            output_text="assistant reply",
+            provider_session_id=None,
+            raw_payload={"ok": True},
+        )
+    )
+    bot = _build_fake_bot(tmp_path, "openai_responses", provider)
+    session = bot.hub_store.create_session(
+        agent_id="gpt-default",
+        provider="openai_responses",
+        discord_channel_id=100,
+        discord_thread_id=200,
+        discord_guild_id=300,
+        created_by_user_id=400,
+    )
+    channel = FakeChannel(200)
+
+    async def read_attachment():
+        return b"ignored"
+
+    attachment = SimpleNamespace(
+        filename="archive.bin",
+        content_type="application/octet-stream",
+        read=read_attachment,
+    )
+    message = SimpleNamespace(
+        author=SimpleNamespace(id=123, display_name="alice"),
+        content="",
+        attachments=[attachment],
+        channel=channel,
+    )
+
+    await handle_user_message(bot, message)
+
+    assert provider.calls == []
+    assert bot.hub_store.list_messages(session.id) == []
+    assert channel.sent_messages == []
+    event_log = (tmp_path / "events.jsonl").read_text(encoding="utf-8")
+    assert "message.empty_ignored" in event_log
+    assert '"original_attachment_count": 1' in event_log
+
+
 async def test_handle_user_message_attaches_latex_source_when_present(tmp_path):
     provider = FakeProvider(
         ProviderResponse(
