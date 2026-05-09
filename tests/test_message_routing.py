@@ -1,7 +1,11 @@
 import asyncio
 from types import SimpleNamespace
 
-from discord_agent_hub.bot import _compact_conversation_for_provider, _extract_latex_source, handle_user_message
+from discord_agent_hub.bot import (
+    _compact_conversation_for_provider,
+    _extract_downloadable_code_blocks,
+    handle_user_message,
+)
 from discord_agent_hub.models import GeneratedFile, ProviderResponse
 from discord_agent_hub.models import MessageRecord
 from discord_agent_hub.providers.base import ProviderRegistry
@@ -296,6 +300,44 @@ async def test_handle_user_message_attaches_latex_source_when_present(tmp_path):
     )
 
 
+async def test_handle_user_message_attaches_python_source_when_present(tmp_path):
+    provider = FakeProvider(
+        ProviderResponse(
+            output_text=(
+                "Here is a script:\n\n"
+                "```python\n"
+                "print('hello')\n"
+                "```"
+            ),
+            provider_session_id=None,
+            raw_payload={"ok": True},
+        )
+    )
+    bot = _build_fake_bot(tmp_path, "openai_responses", provider)
+    session = bot.hub_store.create_session(
+        agent_id="gpt-default",
+        provider="openai_responses",
+        discord_channel_id=100,
+        discord_thread_id=200,
+        discord_guild_id=300,
+        created_by_user_id=400,
+    )
+    channel = FakeChannel(200)
+    message = SimpleNamespace(
+        author=SimpleNamespace(id=123, display_name="alice"),
+        content="make python",
+        channel=channel,
+    )
+
+    await handle_user_message(bot, message)
+
+    assert channel.sent_messages[-1] == "Python source attached."
+    assert len(channel.sent_files) == 1
+    assert channel.sent_files[0].filename == f"{session.id}-python-source.py"
+    channel.sent_files[0].fp.seek(0)
+    assert channel.sent_files[0].fp.read().decode("utf-8") == "print('hello')\n"
+
+
 async def test_handle_user_message_attaches_generated_files(tmp_path):
     provider = FakeProvider(
         ProviderResponse(
@@ -472,12 +514,15 @@ async def test_handle_user_message_blocks_disallowed_roles(tmp_path):
     assert "auth.denied_role" in event_log
 
 
-def test_extract_latex_source_combines_latex_and_tex_blocks():
-    source = _extract_latex_source(
+def test_extract_downloadable_code_blocks_groups_supported_languages():
+    files = _extract_downloadable_code_blocks(
         "A\n```latex\n\\documentclass{article}\n```\nB\n```tex\n\\section{X}\n```"
+        "\nC\n```python\nprint('hello')\n```"
     )
 
-    assert source == "\\documentclass{article}\n\n\\section{X}\n"
+    assert [item.filename for item in files] == ["latex-source.tex", "python-source.py"]
+    assert files[0].data.decode("utf-8") == "\\documentclass{article}\n\n\\section{X}\n"
+    assert files[1].data.decode("utf-8") == "print('hello')\n"
 
 
 def test_compact_conversation_keeps_only_latest_user_image():

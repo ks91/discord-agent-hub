@@ -97,27 +97,61 @@ async def _send_split(thread: discord.Thread, content: str) -> None:
         await thread.send(chunk)
 
 
-LATEX_CODE_BLOCK_RE = re.compile(r"```(?:latex|tex)\s*\n(.*?)```", re.IGNORECASE | re.DOTALL)
+DOWNLOADABLE_CODE_BLOCKS = {
+    "latex": ("latex-source.tex", "text/x-tex", "LaTeX source attached."),
+    "tex": ("latex-source.tex", "text/x-tex", "LaTeX source attached."),
+    "python": ("python-source.py", "text/x-python", "Python source attached."),
+    "py": ("python-source.py", "text/x-python", "Python source attached."),
+}
+DOWNLOADABLE_CODE_BLOCK_RE = re.compile(r"```([A-Za-z0-9_-]+)\s*\n(.*?)```", re.DOTALL)
 MAX_DISCORD_GENERATED_FILES = 5
 MAX_DISCORD_GENERATED_FILE_BYTES = 8 * 1024 * 1024
 
 
-def _extract_latex_source(text: str) -> str | None:
-    blocks = [match.strip() for match in LATEX_CODE_BLOCK_RE.findall(text) if match.strip()]
-    if not blocks:
-        return None
-    return "\n\n".join(blocks).strip() + "\n"
+def _extract_downloadable_code_blocks(text: str) -> list[GeneratedFile]:
+    grouped: dict[str, list[str]] = {}
+    metadata: dict[str, tuple[str, str, str]] = {}
+    for language, body in DOWNLOADABLE_CODE_BLOCK_RE.findall(text):
+        key = language.lower()
+        if key not in DOWNLOADABLE_CODE_BLOCKS:
+            continue
+        filename_suffix, media_type, label = DOWNLOADABLE_CODE_BLOCKS[key]
+        grouped.setdefault(filename_suffix, []).append(body.strip())
+        metadata[filename_suffix] = (filename_suffix, media_type, label)
+    generated_files: list[GeneratedFile] = []
+    for filename_suffix, blocks in grouped.items():
+        if not blocks:
+            continue
+        _, media_type, label = metadata[filename_suffix]
+        data = ("\n\n".join(block for block in blocks if block).strip() + "\n").encode("utf-8")
+        generated_files.append(
+            GeneratedFile(
+                filename=filename_suffix,
+                media_type=media_type,
+                data=data,
+                source_provider=label,
+            )
+        )
+    return generated_files
 
 
-async def _send_latex_source_download(thread: discord.Thread, content: str, *, filename: str) -> bool:
-    latex_source = _extract_latex_source(content)
-    if not latex_source:
-        return False
-    await thread.send(
-        "LaTeX source attached.",
-        file=discord.File(BytesIO(latex_source.encode("utf-8")), filename=filename),
-    )
-    return True
+async def _send_code_block_downloads(thread: discord.Thread, content: str, *, filename_prefix: str) -> list[GeneratedFile]:
+    sent_files: list[GeneratedFile] = []
+    for generated_file in _extract_downloadable_code_blocks(content):
+        filename = f"{filename_prefix}-{generated_file.filename}"
+        await thread.send(
+            generated_file.source_provider,
+            file=discord.File(BytesIO(generated_file.data), filename=filename),
+        )
+        sent_files.append(
+            GeneratedFile(
+                filename=filename,
+                media_type=generated_file.media_type,
+                data=generated_file.data,
+                source_provider=generated_file.source_provider,
+            )
+        )
+    return sent_files
 
 
 async def _send_generated_files(thread: discord.Thread, files: list[GeneratedFile]) -> list[str]:
@@ -1542,19 +1576,19 @@ async def handle_user_message(bot: DiscordAgentHub, message: discord.Message) ->
                     agent_id=agent.id,
                     filename=filename,
                 )
-            attached_latex = await _send_latex_source_download(
+            code_block_files = await _send_code_block_downloads(
                 message.channel,
                 response.output_text,
-                filename=f"{session.id}-latex-source.tex",
+                filename_prefix=session.id,
             )
-            if attached_latex:
+            for file_info in code_block_files:
                 bot.structured_logger.append(
                     "response.attachment",
                     session_id=session.id,
                     provider=session.provider,
                     agent_id=agent.id,
-                    filename=f"{session.id}-latex-source.tex",
-                    media_type="text/x-tex",
+                    filename=file_info.filename,
+                    media_type=file_info.media_type,
                 )
     finally:
         remaining = queue_depths.get(thread_id, 1) - 1

@@ -215,9 +215,9 @@ For PDF extraction, the hub now prefers the external `pdftotext` command when av
 
 This keeps the implementation provider-agnostic while already supporting common workflows such as summarizing papers, notes, slides, and spreadsheets.
 
-## Generated LaTeX
+## Downloadable Code Blocks
 
-When an agent response contains a fenced `latex` or `tex` code block, the hub also attaches the extracted source as a downloadable `.tex` file. This is useful for agents that draft LaTeX manuscripts, tables, or slides.
+When an agent response contains a fenced `latex`/`tex` or `python`/`py` code block, the hub also attaches the extracted source as a downloadable `.tex` or `.py` file. This is useful for agents that draft LaTeX manuscripts, tables, slides, or reusable Python scripts.
 
 ## Generated Files
 
