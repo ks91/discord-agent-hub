@@ -58,8 +58,17 @@ class MessageRecord:
 
 
 @dataclass(slots=True)
+class GeneratedFile:
+    filename: str
+    media_type: str
+    data: bytes
+    source_provider: str
+
+
+@dataclass(slots=True)
 class ProviderResponse:
     output_text: str
     provider_session_id: str | None = None
     raw_payload: dict[str, Any] | None = None
     usage: dict[str, Any] = field(default_factory=dict)
+    generated_files: list[GeneratedFile] = field(default_factory=list)

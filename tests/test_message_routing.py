@@ -2,7 +2,7 @@ import asyncio
 from types import SimpleNamespace
 
 from discord_agent_hub.bot import _compact_conversation_for_provider, _extract_latex_source, handle_user_message
-from discord_agent_hub.models import ProviderResponse
+from discord_agent_hub.models import GeneratedFile, ProviderResponse
 from discord_agent_hub.models import MessageRecord
 from discord_agent_hub.providers.base import ProviderRegistry
 from discord_agent_hub.storage import AgentStore, HubStore
@@ -294,6 +294,50 @@ async def test_handle_user_message_attaches_latex_source_when_present(tmp_path):
         "Hello\n"
         "\\end{document}\n"
     )
+
+
+async def test_handle_user_message_attaches_generated_files(tmp_path):
+    provider = FakeProvider(
+        ProviderResponse(
+            output_text="I generated a CSV.",
+            provider_session_id=None,
+            raw_payload={"ok": True},
+            generated_files=[
+                GeneratedFile(
+                    filename="result.csv",
+                    media_type="text/csv",
+                    data=b"name,score\nalice,42\n",
+                    source_provider="openai_responses",
+                )
+            ],
+        )
+    )
+    bot = _build_fake_bot(tmp_path, "openai_responses", provider)
+    bot.hub_store.create_session(
+        agent_id="gpt-default",
+        provider="openai_responses",
+        discord_channel_id=100,
+        discord_thread_id=200,
+        discord_guild_id=300,
+        created_by_user_id=400,
+    )
+    channel = FakeChannel(200)
+    message = SimpleNamespace(
+        author=SimpleNamespace(id=123, display_name="alice"),
+        content="make csv",
+        channel=channel,
+    )
+
+    await handle_user_message(bot, message)
+
+    assert channel.sent_messages == [
+        "I generated a CSV.",
+        "Generated file attached: `result.csv`",
+    ]
+    assert len(channel.sent_files) == 1
+    assert channel.sent_files[0].filename == "result.csv"
+    channel.sent_files[0].fp.seek(0)
+    assert channel.sent_files[0].fp.read() == b"name,score\nalice,42\n"
 
 
 async def test_handle_user_message_serializes_same_thread_requests(tmp_path):

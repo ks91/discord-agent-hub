@@ -31,7 +31,7 @@ from discord_agent_hub.conversation_render import render_message_text
 from discord_agent_hub.config import Settings
 from discord_agent_hub.document_extract import DocumentExtractionError, extract_document_text, is_supported_document
 from discord_agent_hub.knowledge import KnowledgeChunk, build_knowledge_context
-from discord_agent_hub.models import MessageRecord, utc_now
+from discord_agent_hub.models import GeneratedFile, MessageRecord, utc_now
 from discord_agent_hub.provider_instructions import CODE_EXECUTION_CAPABILITY_NOTE
 from discord_agent_hub.providers.base import ProviderRegistry
 from discord_agent_hub.storage import AgentStore, HubStore
@@ -98,6 +98,8 @@ async def _send_split(thread: discord.Thread, content: str) -> None:
 
 
 LATEX_CODE_BLOCK_RE = re.compile(r"```(?:latex|tex)\s*\n(.*?)```", re.IGNORECASE | re.DOTALL)
+MAX_DISCORD_GENERATED_FILES = 5
+MAX_DISCORD_GENERATED_FILE_BYTES = 8 * 1024 * 1024
 
 
 def _extract_latex_source(text: str) -> str | None:
@@ -116,6 +118,19 @@ async def _send_latex_source_download(thread: discord.Thread, content: str, *, f
         file=discord.File(BytesIO(latex_source.encode("utf-8")), filename=filename),
     )
     return True
+
+
+async def _send_generated_files(thread: discord.Thread, files: list[GeneratedFile]) -> list[str]:
+    sent_filenames: list[str] = []
+    for generated_file in files[:MAX_DISCORD_GENERATED_FILES]:
+        if not generated_file.data or len(generated_file.data) > MAX_DISCORD_GENERATED_FILE_BYTES:
+            continue
+        await thread.send(
+            f"Generated file attached: `{generated_file.filename}`",
+            file=discord.File(BytesIO(generated_file.data), filename=generated_file.filename),
+        )
+        sent_filenames.append(generated_file.filename)
+    return sent_filenames
 
 
 async def _send_interaction_split(interaction: discord.Interaction, content: str, *, ephemeral: bool = True) -> None:
@@ -1515,6 +1530,18 @@ async def handle_user_message(bot: DiscordAgentHub, message: discord.Message) ->
                 raw_payload=response.raw_payload,
             )
             await _send_split(message.channel, response.output_text)
+            generated_filenames = await _send_generated_files(
+                message.channel,
+                getattr(response, "generated_files", []),
+            )
+            for filename in generated_filenames:
+                bot.structured_logger.append(
+                    "response.attachment",
+                    session_id=session.id,
+                    provider=session.provider,
+                    agent_id=agent.id,
+                    filename=filename,
+                )
             attached_latex = await _send_latex_source_download(
                 message.channel,
                 response.output_text,

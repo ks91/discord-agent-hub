@@ -219,6 +219,10 @@ This keeps the implementation provider-agnostic while already supporting common 
 
 When an agent response contains a fenced `latex` or `tex` code block, the hub also attaches the extracted source as a downloadable `.tex` file. This is useful for agents that draft LaTeX manuscripts, tables, or slides.
 
+## Generated Files
+
+When an OpenAI Responses agent uses provider-side code execution and creates files in the Code Interpreter container, the hub downloads generated container files immediately and attaches them to the Discord thread. Generated file attachments are capped to keep Discord uploads bounded.
+
 ## Knowledge Sources
 
 Knowledge sources are reusable document collections that agents can retrieve from during chat.

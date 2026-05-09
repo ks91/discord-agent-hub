@@ -22,6 +22,51 @@ class FakeOpenAIClient:
         self.responses = FakeResponsesAPI()
 
 
+class FakeContainerContentAPI:
+    def __init__(self) -> None:
+        self.calls = []
+
+    async def retrieve(self, *, file_id, container_id):
+        self.calls.append({"file_id": file_id, "container_id": container_id})
+        return SimpleNamespace(read=lambda: b"generated,csv\n1,2\n")
+
+
+class FakeContainerFilesAPI:
+    def __init__(self) -> None:
+        self.content = FakeContainerContentAPI()
+        self.calls = []
+
+    async def list(self, *, container_id, limit):
+        self.calls.append({"container_id": container_id, "limit": limit})
+        return SimpleNamespace(
+            data=[
+                SimpleNamespace(
+                    id="cfile_user",
+                    source="user",
+                    bytes=5,
+                    path="/mnt/data/input.csv",
+                ),
+                SimpleNamespace(
+                    id="cfile_generated",
+                    source="assistant",
+                    bytes=18,
+                    path="/mnt/data/result.csv",
+                ),
+            ]
+        )
+
+
+class FakeContainersAPI:
+    def __init__(self) -> None:
+        self.files = FakeContainerFilesAPI()
+
+
+class FakeOpenAIClientWithContainers(FakeOpenAIClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.containers = FakeContainersAPI()
+
+
 async def test_openai_provider_uses_input_text_for_user_and_output_text_for_assistant():
     provider = OpenAIResponsesProvider(api_key="test-key", default_model="gpt-5.2")
     provider.client = FakeOpenAIClient()
@@ -119,6 +164,45 @@ async def test_openai_provider_adds_selected_tools_to_request():
     ]
     assert call["tool_choice"] == "auto"
     assert CODE_EXECUTION_CAPABILITY_NOTE in call["instructions"]
+
+
+async def test_openai_provider_collects_generated_container_files():
+    provider = OpenAIResponsesProvider(api_key="test-key", default_model="gpt-5.2")
+    provider.client = FakeOpenAIClientWithContainers()
+
+    async def create_with_container(**kwargs):
+        provider.client.responses.calls.append(kwargs)
+        return SimpleNamespace(
+            output_text="created result.csv",
+            model_dump=lambda: {
+                "id": "resp_123",
+                "output": [
+                    {
+                        "type": "code_interpreter_call",
+                        "container_id": "cntr_123",
+                    }
+                ],
+            },
+        )
+
+    provider.client.responses.create = create_with_container
+    agent = AgentDefinition(
+        id="gpt-tools",
+        name="OpenAI Tools",
+        provider=ProviderKind.OPENAI_RESPONSES,
+        tools={"code_execution": True},
+    )
+
+    response = await provider.generate(agent=agent, conversation=[], provider_session_id=None)
+
+    assert provider.client.containers.files.calls == [{"container_id": "cntr_123", "limit": 100}]
+    assert provider.client.containers.files.content.calls == [
+        {"file_id": "cfile_generated", "container_id": "cntr_123"}
+    ]
+    assert len(response.generated_files) == 1
+    assert response.generated_files[0].filename == "result.csv"
+    assert response.generated_files[0].media_type == "text/csv"
+    assert response.generated_files[0].data == b"generated,csv\n1,2\n"
 
 
 async def test_openai_provider_adds_file_search_tool_for_vector_store_metadata():
