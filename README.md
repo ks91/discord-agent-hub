@@ -223,6 +223,21 @@ When an agent response contains a fenced `latex` or `tex` code block, the hub al
 
 When an agent uses provider-side code execution and creates files, the hub attaches supported generated outputs to the Discord thread. OpenAI container files and Claude Files API outputs are downloaded immediately; Gemini inline code-execution outputs such as generated images are attached from the response payload. Generated file attachments are capped to keep Discord uploads bounded.
 
+Current generated-file behavior:
+
+- OpenAI Responses: generated Code Interpreter container files are downloaded and attached
+- Anthropic Messages: generated Files API outputs from Claude code execution are downloaded and attached
+- Gemini API: generated inline code-execution outputs, especially images/plots, are attached from `inlineData`
+- The hub attaches up to 5 generated files per response
+- Files larger than 8 MiB are skipped
+
+Input file handling for code execution is provider-specific:
+
+- OpenAI: image attachments are sent as vision input; generated files can be returned, but user attachments are not yet uploaded into the Code Interpreter container as files
+- Claude: image attachments are sent as vision input and, when `tools.code_execution: true`, also uploaded as `container_upload` files so code execution can process them
+- Gemini: image attachments are sent as inline data and can be used with Gemini code execution I/O
+- Document attachments are converted to text by the hub; they are not yet uploaded as native code-execution input files
+
 ## Knowledge Sources
 
 Knowledge sources are reusable document collections that agents can retrieve from during chat.
