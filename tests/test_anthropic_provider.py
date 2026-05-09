@@ -175,8 +175,74 @@ async def test_anthropic_provider_adds_selected_tools_and_beta_header():
         {"type": "web_search_20250305", "name": "web_search", "max_uses": 5},
         {"type": "code_execution_20250825", "name": "code_execution"},
     ]
-    assert captured["headers"]["anthropic-beta"] == "code-execution-2025-08-25"
+    assert captured["headers"]["anthropic-beta"] == "code-execution-2025-08-25,files-api-2025-04-14"
     assert CODE_EXECUTION_CAPABILITY_NOTE in captured["json"]["system"]
+
+
+async def test_anthropic_provider_collects_generated_files():
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append((request.method, request.url.path, dict(request.headers)))
+        if request.method == "POST":
+            return httpx.Response(
+                200,
+                json={
+                    "content": [
+                        {"type": "text", "text": "created output.png"},
+                        {
+                            "type": "bash_code_execution_tool_result",
+                            "content": {
+                                "type": "code_execution_result",
+                                "content": [{"file_id": "file_generated"}],
+                            },
+                        },
+                    ],
+                },
+            )
+        if request.url.path == "/v1/files/file_generated":
+            return httpx.Response(
+                200,
+                json={
+                    "id": "file_generated",
+                    "filename": "output.png",
+                    "mime_type": "image/png",
+                    "size_bytes": 7,
+                },
+            )
+        if request.url.path == "/v1/files/file_generated/content":
+            return httpx.Response(200, content=b"pngdata")
+        return httpx.Response(404)
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://api.anthropic.com",
+    )
+    provider = AnthropicMessagesProvider(
+        api_key="test-key",
+        default_model="claude-sonnet-4-0",
+        http_client=client,
+    )
+    agent = AgentDefinition(
+        id="anthropic-tools",
+        name="Anthropic Tools",
+        provider=ProviderKind.ANTHROPIC_MESSAGES,
+        tools={"code_execution": True},
+    )
+
+    response = await provider.generate(agent=agent, conversation=[], provider_session_id=None)
+
+    assert [item[:2] for item in requests] == [
+        ("POST", "/v1/messages"),
+        ("GET", "/v1/files/file_generated"),
+        ("GET", "/v1/files/file_generated/content"),
+    ]
+    assert requests[0][2]["anthropic-beta"] == "code-execution-2025-08-25,files-api-2025-04-14"
+    assert len(response.generated_files) == 1
+    assert response.generated_files[0].filename == "output.png"
+    assert response.generated_files[0].media_type == "image/png"
+    assert response.generated_files[0].data == b"pngdata"
+    assert response.generated_files[0].source_provider == "anthropic_messages"
 
 
 async def test_anthropic_provider_includes_image_attachments_in_user_messages():

@@ -1,4 +1,5 @@
 import json
+import base64
 
 import httpx
 
@@ -151,6 +152,55 @@ async def test_gemini_provider_adds_selected_tools_to_request():
     ]
     system_text = captured["json"]["systemInstruction"]["parts"][0]["text"]
     assert CODE_EXECUTION_CAPABILITY_NOTE in system_text
+
+
+async def test_gemini_provider_collects_inline_generated_files():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {"text": "created plot"},
+                                {
+                                    "inlineData": {
+                                        "mimeType": "image/png",
+                                        "data": base64.b64encode(b"pngdata").decode("ascii"),
+                                    }
+                                },
+                            ]
+                        }
+                    }
+                ]
+            },
+        )
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://generativelanguage.googleapis.com",
+    )
+    provider = GeminiAPIProvider(
+        api_key="gemini-key",
+        default_model="gemini-2.5-pro",
+        http_client=client,
+    )
+    agent = AgentDefinition(
+        id="gemini-tools",
+        name="Gemini Tools",
+        provider=ProviderKind.GEMINI_API,
+        tools={"code_execution": True},
+    )
+
+    response = await provider.generate(agent=agent, conversation=[], provider_session_id=None)
+
+    assert response.output_text == "created plot"
+    assert len(response.generated_files) == 1
+    assert response.generated_files[0].filename == "gemini-generated-1.png"
+    assert response.generated_files[0].media_type == "image/png"
+    assert response.generated_files[0].data == b"pngdata"
+    assert response.generated_files[0].source_provider == "gemini_api"
 
 
 async def test_gemini_provider_adds_file_search_tool_for_store_metadata():

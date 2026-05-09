@@ -221,7 +221,7 @@ When an agent response contains a fenced `latex` or `tex` code block, the hub al
 
 ## Generated Files
 
-When an OpenAI Responses agent uses provider-side code execution and creates files in the Code Interpreter container, the hub downloads generated container files immediately and attaches them to the Discord thread. Generated file attachments are capped to keep Discord uploads bounded.
+When an agent uses provider-side code execution and creates files, the hub attaches supported generated outputs to the Discord thread. OpenAI container files and Claude Files API outputs are downloaded immediately; Gemini inline code-execution outputs such as generated images are attached from the response payload. Generated file attachments are capped to keep Discord uploads bounded.
 
 ## Knowledge Sources
 

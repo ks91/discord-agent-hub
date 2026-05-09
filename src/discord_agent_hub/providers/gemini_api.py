@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import base64
+import mimetypes
 from typing import Any
 
 import httpx
 
 from discord_agent_hub.conversation_render import render_message_text
-from discord_agent_hub.models import AgentDefinition, MessageRecord, ProviderResponse
+from discord_agent_hub.models import AgentDefinition, GeneratedFile, MessageRecord, ProviderResponse
 from discord_agent_hub.provider_instructions import render_provider_instructions
 from discord_agent_hub.providers.base import Provider
+
+MAX_GENERATED_FILES = 5
+MAX_GENERATED_FILE_BYTES = 8 * 1024 * 1024
 
 
 class GeminiAPIProvider(Provider):
@@ -102,6 +107,7 @@ class GeminiAPIProvider(Provider):
             provider_session_id=provider_session_id,
             raw_payload=body,
             usage=self._extract_usage(body),
+            generated_files=self._extract_generated_files(body),
         )
 
     @staticmethod
@@ -125,3 +131,48 @@ class GeminiAPIProvider(Provider):
             "total_tokens": usage.get("totalTokenCount"),
             "cached_input_tokens": usage.get("cachedContentTokenCount"),
         }
+
+    @staticmethod
+    def _extract_generated_files(body: dict[str, Any]) -> list[GeneratedFile]:
+        generated_files: list[GeneratedFile] = []
+        for candidate in body.get("candidates", []):
+            content = candidate.get("content", {})
+            for part in content.get("parts", []):
+                inline_data = part.get("inline_data") or part.get("inlineData")
+                if not isinstance(inline_data, dict):
+                    continue
+                media_type = (
+                    inline_data.get("mime_type")
+                    or inline_data.get("mimeType")
+                    or "application/octet-stream"
+                )
+                encoded = inline_data.get("data")
+                if not isinstance(encoded, str) or not encoded:
+                    continue
+                try:
+                    data = base64.b64decode(encoded)
+                except Exception:
+                    continue
+                if not data or len(data) > MAX_GENERATED_FILE_BYTES:
+                    continue
+                index = len(generated_files) + 1
+                generated_files.append(
+                    GeneratedFile(
+                        filename=f"gemini-generated-{index}{_extension_for_media_type(media_type)}",
+                        media_type=media_type,
+                        data=data,
+                        source_provider="gemini_api",
+                    )
+                )
+                if len(generated_files) >= MAX_GENERATED_FILES:
+                    return generated_files
+        return generated_files
+
+
+def _extension_for_media_type(media_type: str) -> str:
+    if media_type == "image/png":
+        return ".png"
+    if media_type in {"image/jpeg", "image/jpg"}:
+        return ".jpg"
+    guessed = mimetypes.guess_extension(media_type)
+    return guessed or ".bin"
