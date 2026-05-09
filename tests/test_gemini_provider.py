@@ -118,6 +118,34 @@ async def test_gemini_provider_requires_api_key():
         raise AssertionError("Expected RuntimeError when API key is missing")
 
 
+async def test_gemini_provider_reports_error_body():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": {"message": "bad inline image"}})
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://generativelanguage.googleapis.com",
+    )
+    provider = GeminiAPIProvider(
+        api_key="gemini-key",
+        default_model="gemini-2.5-pro",
+        http_client=client,
+    )
+    agent = AgentDefinition(
+        id="gemini-default",
+        name="Gemini Default",
+        provider=ProviderKind.GEMINI_API,
+    )
+
+    try:
+        await provider.generate(agent=agent, conversation=[], provider_session_id=None)
+    except RuntimeError as exc:
+        assert "Gemini API error 400" in str(exc)
+        assert "bad inline image" in str(exc)
+    else:
+        raise AssertionError("Expected RuntimeError when Gemini returns an error body")
+
+
 async def test_gemini_provider_adds_selected_tools_to_request():
     captured = {}
 

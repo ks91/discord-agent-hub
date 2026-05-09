@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import mimetypes
 from pathlib import Path
 from typing import Any
@@ -42,6 +43,18 @@ class AnthropicMessagesProvider(Provider):
         if not self.api_key:
             raise RuntimeError("ANTHROPIC_API_KEY is not configured")
 
+        code_execution_enabled = bool(agent.tools.get("code_execution"))
+        beta_headers = []
+        if code_execution_enabled:
+            beta_headers.extend([CODE_EXECUTION_BETA, FILES_API_BETA])
+        headers = {
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        }
+        if beta_headers:
+            headers["anthropic-beta"] = ",".join(beta_headers)
+
         messages = []
         for item in conversation:
             if item.role == "system":
@@ -61,6 +74,13 @@ class AnthropicMessagesProvider(Provider):
                         },
                     }
                 )
+                if code_execution_enabled and role == "user":
+                    file_id = await self._upload_container_file(
+                        attachment=attachment,
+                        headers=headers,
+                    )
+                    if file_id:
+                        content.append({"type": "container_upload", "file_id": file_id})
             text = render_message_text(item)
             if text.strip() or not content:
                 content.append({"type": "text", "text": text})
@@ -81,7 +101,6 @@ class AnthropicMessagesProvider(Provider):
             "messages": messages,
         }
         tools = []
-        beta_headers = []
         if agent.tools.get("web_search"):
             tools.append(
                 {
@@ -97,17 +116,8 @@ class AnthropicMessagesProvider(Provider):
                     "name": "code_execution",
                 }
             )
-            beta_headers.extend([CODE_EXECUTION_BETA, FILES_API_BETA])
         if tools:
             payload["tools"] = tools
-
-        headers = {
-            "x-api-key": self.api_key,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-        }
-        if beta_headers:
-            headers["anthropic-beta"] = ",".join(beta_headers)
 
         response = await self.http_client.post(
             "/v1/messages",
@@ -190,6 +200,31 @@ class AnthropicMessagesProvider(Provider):
                 )
             )
         return generated_files
+
+    async def _upload_container_file(self, *, attachment: dict[str, Any], headers: dict[str, str]) -> str | None:
+        data = attachment.get("data")
+        if not isinstance(data, str) or not data:
+            return None
+        try:
+            raw = base64.b64decode(data)
+        except Exception:
+            return None
+        filename = _safe_filename(str(attachment.get("filename") or "attachment"))
+        media_type = str(attachment.get("media_type") or mimetypes.guess_type(filename)[0] or "application/octet-stream")
+        upload_headers = dict(headers)
+        upload_headers.pop("content-type", None)
+        response = await self.http_client.post(
+            "/v1/files",
+            headers=upload_headers,
+            files={"file": (filename, raw, media_type)},
+        )
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError:
+            return None
+        payload = response.json()
+        file_id = payload.get("id")
+        return file_id if isinstance(file_id, str) and file_id else None
 
 
 def _extract_file_ids(value: Any) -> list[str]:

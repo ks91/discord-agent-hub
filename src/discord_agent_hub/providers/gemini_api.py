@@ -99,7 +99,15 @@ class GeminiAPIProvider(Provider):
             params={"key": self.api_key},
             json=payload,
         )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            detail = response.text.strip()
+            if detail:
+                raise RuntimeError(
+                    f"Gemini API error {response.status_code}: {detail}"
+                ) from exc
+            raise
         body = response.json()
         output_text = self._extract_text(body)
         return ProviderResponse(

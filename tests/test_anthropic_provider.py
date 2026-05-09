@@ -303,6 +303,72 @@ async def test_anthropic_provider_includes_image_attachments_in_user_messages():
     ]
 
 
+async def test_anthropic_provider_uploads_images_for_code_execution_container():
+    captured = {}
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append((request.method, request.url.path, dict(request.headers)))
+        if request.url.path == "/v1/files":
+            assert request.headers["anthropic-beta"] == "code-execution-2025-08-25,files-api-2025-04-14"
+            return httpx.Response(200, json={"id": "file_uploaded"})
+        captured["json"] = json.loads(request.content.decode("utf-8"))
+        return httpx.Response(200, json={"content": [{"type": "text", "text": "done"}]})
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://api.anthropic.com",
+    )
+    provider = AnthropicMessagesProvider(
+        api_key="test-key",
+        default_model="claude-sonnet-4-0",
+        http_client=client,
+    )
+    agent = AgentDefinition(
+        id="claude-code",
+        name="Claude Code",
+        provider=ProviderKind.ANTHROPIC_MESSAGES,
+        tools={"code_execution": True},
+    )
+    conversation = [
+        MessageRecord(
+            session_id="s1",
+            role="user",
+            author_id=1,
+            author_name="alice",
+            content="Make it grayscale",
+            attachments=[
+                {
+                    "type": "image",
+                    "filename": "cat.png",
+                    "media_type": "image/png",
+                    "data": "ZmFrZQ==",
+                }
+            ],
+            created_at="2026-04-06T00:00:00+00:00",
+        )
+    ]
+
+    await provider.generate(agent=agent, conversation=conversation, provider_session_id=None)
+
+    assert [item[:2] for item in requests] == [
+        ("POST", "/v1/files"),
+        ("POST", "/v1/messages"),
+    ]
+    assert captured["json"]["messages"][0]["content"] == [
+        {
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": "image/png",
+                "data": "ZmFrZQ==",
+            },
+        },
+        {"type": "container_upload", "file_id": "file_uploaded"},
+        {"type": "text", "text": "alice: Make it grayscale"},
+    ]
+
+
 async def test_anthropic_provider_omits_empty_text_when_image_only():
     captured = {}
 
