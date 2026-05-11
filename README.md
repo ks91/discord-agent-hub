@@ -256,6 +256,12 @@ Import a source with:
 
 By default, knowledge sources use the `hub_lexical` backend. This stores extracted text in SQLite and performs lightweight lexical retrieval inside the hub.
 
+The default is a compatibility fallback, not the best choice for every agent. For OpenAI and Gemini agents, prefer the provider-native backend when you want stronger retrieval quality from uploaded documents:
+
+- OpenAI agents: use `backend:openai_file_search`
+- Gemini agents: use `backend:gemini_file_search`
+- Claude agents: use `backend:hub_lexical` for now, because this hub does not yet integrate a Claude-native knowledge backend
+
 Use `overwrite:true` to replace the whole knowledge source with the uploaded file:
 
 ```text
@@ -273,11 +279,11 @@ You can choose a backend:
 
 Backends:
 
-- `hub_lexical`: provider-agnostic SQLite lexical retrieval; works with OpenAI, Anthropic, and Gemini agents
-- `openai_file_search`: OpenAI vector store / Responses API `file_search`; works with OpenAI agents
-- `gemini_file_search`: Gemini File Search store; works with Gemini agents
+- `hub_lexical`: provider-agnostic SQLite lexical retrieval; works with OpenAI, Anthropic, and Gemini agents, but is lexical rather than semantic
+- `openai_file_search`: OpenAI vector store / Responses API `file_search`; recommended for OpenAI agents that should answer from uploaded documents
+- `gemini_file_search`: Gemini File Search store; recommended for Gemini agents that should answer from uploaded documents
 
-Provider-native backends are source-specific. For the same document set, prefer separate source IDs such as `gpt-papers-hub`, `gpt-papers-openai`, and `gpt-papers-gemini`.
+Provider-native backends are source-specific and cannot be shared across providers. For the same document set, prefer separate source IDs such as `gpt-papers-hub`, `gpt-papers-openai`, and `gpt-papers-gemini`.
 
 Gemini native File Search requires the `google-genai` Python package and a configured `GEMINI_API_KEY`. After pulling a version that adds or changes dependencies, re-run `pip install -e .`.
 
