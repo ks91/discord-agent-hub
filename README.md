@@ -127,7 +127,7 @@ When this is set, commands are synced to that guild immediately instead of waiti
 
 ## Discord Commands
 
-- `/agent-list`: shows available agents
+- `/agent-list [query]`: shows available agents, optionally filtered by ID, name, provider, or description
 - `/agent-import`: imports an agent from a Markdown file with a ```agent block
 - `/agent-show`: shows the imported agent definition
 - `/agent-show-full`: shows the full public instructions for an agent

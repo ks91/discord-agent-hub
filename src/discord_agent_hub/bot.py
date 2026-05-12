@@ -497,6 +497,21 @@ def _build_agent_choices(agent_store: AgentStore, current: str) -> list[app_comm
     ]
 
 
+def _filter_agents_for_list(agents: Iterable, query: str | None) -> list:
+    enabled_agents = [agent for agent in agents if agent.enabled]
+    needle = (query or "").strip().lower()
+    if not needle:
+        return enabled_agents
+    return [
+        agent
+        for agent in enabled_agents
+        if needle in agent.id.lower()
+        or needle in agent.name.lower()
+        or needle in agent.provider.value.lower()
+        or needle in (agent.description or "").lower()
+    ]
+
+
 def _build_knowledge_source_choices(hub_store: HubStore, current: str) -> list[app_commands.Choice[str]]:
     current_lower = current.lower().strip()
     sources: Iterable[dict] = hub_store.list_knowledge_sources()
@@ -786,19 +801,23 @@ def _build_transcript_markdown(*, session, agent, messages: list[MessageRecord],
 
 
 @app_commands.command(name="agent-list", description="List available agents")
-async def agent_list(interaction: discord.Interaction) -> None:
+@app_commands.describe(query="Filter agents by ID, name, provider, or description")
+async def agent_list(interaction: discord.Interaction, query: str | None = None) -> None:
     bot = interaction.client
     assert isinstance(bot, DiscordAgentHub)
     if not bot.guild_allowed(interaction.guild):
         await interaction.response.send_message("This server is not allowed.", ephemeral=True)
         return
 
-    agents = bot.agent_store.list_agents()
+    agents = _filter_agents_for_list(bot.agent_store.list_agents(), query)
+    if not agents:
+        suffix = f" matching `{query}`" if query else ""
+        await interaction.response.send_message(f"No enabled agents{suffix}.", ephemeral=True)
+        return
     lines = [
         f"- `{agent.id}`: {agent.name} ({agent.provider.value})"
         + (f" - {agent.description}" if agent.description else "")
         for agent in agents
-        if agent.enabled
     ]
     await _send_interaction_split(interaction, "\n".join(lines), ephemeral=True)
 

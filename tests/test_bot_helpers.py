@@ -4,6 +4,7 @@ from discord_agent_hub.bot import (
     _attach_knowledge_context,
     _build_agent_choices,
     _build_knowledge_source_choices,
+    _filter_agents_for_list,
     _hub_lexical_source_ids_for_provider,
     _knowledge_source_ids,
     _merge_agent_metadata,
@@ -37,6 +38,38 @@ def test_build_agent_choices_filters_by_id_or_name(tmp_path):
 
     assert [choice.value for choice in id_matches] == ["claude-default"]
     assert [choice.value for choice in name_matches] == ["gemini-default"]
+
+
+def test_filter_agents_for_list_matches_id_name_provider_or_description():
+    agents = [
+        AgentDefinition(
+            id="team-a-quiz",
+            name="Quiz Host",
+            provider=ProviderKind.OPENAI_RESPONSES,
+            description="Finance classroom exercise",
+        ),
+        AgentDefinition(
+            id="team-b-reader",
+            name="Reading Coach",
+            provider=ProviderKind.GEMINI_API,
+            description="",
+        ),
+        AgentDefinition(
+            id="disabled-agent",
+            name="Disabled",
+            provider=ProviderKind.ANTHROPIC_MESSAGES,
+            enabled=False,
+        ),
+    ]
+
+    assert [agent.id for agent in _filter_agents_for_list(agents, "quiz")] == ["team-a-quiz"]
+    assert [agent.id for agent in _filter_agents_for_list(agents, "reading")] == ["team-b-reader"]
+    assert [agent.id for agent in _filter_agents_for_list(agents, "gemini")] == ["team-b-reader"]
+    assert [agent.id for agent in _filter_agents_for_list(agents, "finance")] == ["team-a-quiz"]
+    assert [agent.id for agent in _filter_agents_for_list(agents, None)] == [
+        "team-a-quiz",
+        "team-b-reader",
+    ]
 
 
 def test_build_knowledge_source_choices_filters_by_id(tmp_path):
