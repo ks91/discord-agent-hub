@@ -177,6 +177,7 @@ async def test_anthropic_provider_adds_selected_tools_and_beta_header():
     ]
     assert captured["headers"]["anthropic-beta"] == "code-execution-2025-08-25,files-api-2025-04-14"
     assert CODE_EXECUTION_CAPABILITY_NOTE in captured["json"]["system"]
+    assert "Before saying an uploaded file is unavailable" in captured["json"]["system"]
 
 
 async def test_anthropic_provider_collects_generated_files():
@@ -364,8 +365,16 @@ async def test_anthropic_provider_uploads_images_for_code_execution_container():
                 "data": "ZmFrZQ==",
             },
         },
+        {
+            "type": "text",
+            "text": (
+                "alice: Make it grayscale\n\n"
+                "The following files were uploaded to the Claude code execution container "
+                "for this message. Use shell commands such as `find . -name '<filename>'` "
+                "or `ls -R` to locate their exact paths before reading them: cat.png"
+            ),
+        },
         {"type": "container_upload", "file_id": "file_uploaded"},
-        {"type": "text", "text": "alice: Make it grayscale"},
     ]
 
 
@@ -418,8 +427,16 @@ async def test_anthropic_provider_uploads_runtime_files_for_code_execution_conta
 
     assert uploads
     assert captured["json"]["messages"][0]["content"] == [
+        {
+            "type": "text",
+            "text": (
+                "alice: Use this font for Japanese labels\n\n"
+                "The following files were uploaded to the Claude code execution container "
+                "for this message. Use shell commands such as `find . -name '<filename>'` "
+                "or `ls -R` to locate their exact paths before reading them: NotoSansJP-Regular.otf"
+            ),
+        },
         {"type": "container_upload", "file_id": "file_font"},
-        {"type": "text", "text": "alice: Use this font for Japanese labels"},
     ]
 
 

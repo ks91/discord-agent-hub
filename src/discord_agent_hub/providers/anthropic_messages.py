@@ -61,6 +61,8 @@ class AnthropicMessagesProvider(Provider):
                 continue
             role = "assistant" if item.role == "assistant" else "user"
             content = []
+            uploaded_filenames: list[str] = []
+            upload_blocks: list[dict[str, str]] = []
             for attachment in item.attachments:
                 if attachment.get("type") not in {"image", "runtime_file"} or role == "assistant":
                     continue
@@ -81,10 +83,20 @@ class AnthropicMessagesProvider(Provider):
                         headers=headers,
                     )
                     if file_id:
-                        content.append({"type": "container_upload", "file_id": file_id})
+                        upload_blocks.append({"type": "container_upload", "file_id": file_id})
+                        uploaded_filenames.append(str(attachment.get("filename") or file_id))
             text = render_message_text(item)
+            if uploaded_filenames:
+                note = (
+                    "The following files were uploaded to the Claude code execution container "
+                    "for this message. Use shell commands such as `find . -name '<filename>'` "
+                    "or `ls -R` to locate their exact paths before reading them: "
+                    + ", ".join(uploaded_filenames)
+                )
+                text = f"{text}\n\n{note}".strip()
             if text.strip() or not content:
                 content.append({"type": "text", "text": text})
+            content.extend(upload_blocks)
             if not any(
                 part.get("text", "").strip()
                 or part.get("type") in {"image", "container_upload"}
@@ -102,7 +114,7 @@ class AnthropicMessagesProvider(Provider):
             "model": agent.model or self.default_model,
             "max_tokens": 4096,
             "cache_control": {"type": "ephemeral"},
-            "system": render_provider_instructions(agent),
+            "system": _render_anthropic_instructions(agent),
             "messages": messages,
         }
         tools = []
@@ -254,3 +266,17 @@ def _safe_filename(value: str) -> str:
     name = Path(value).name or "generated-file"
     safe = "".join(char if char.isalnum() or char in "._-" else "_" for char in name)
     return safe[:120] or "generated-file"
+
+
+def _render_anthropic_instructions(agent: AgentDefinition) -> str:
+    instructions = render_provider_instructions(agent)
+    if not agent.tools.get("code_execution"):
+        return instructions
+    return (
+        f"{instructions.rstrip()}\n\n"
+        "Claude code execution note: When the user provides files via container_upload, "
+        "they are available inside the Claude code execution container, but their exact "
+        "paths may need to be discovered. Before saying an uploaded file is unavailable, "
+        "run shell commands such as `ls -R` or `find . -name '<filename>'` in code execution "
+        "to locate it."
+    )
