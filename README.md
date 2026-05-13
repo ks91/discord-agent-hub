@@ -239,6 +239,14 @@ Input file handling for code execution is provider-specific:
 - Gemini: image attachments are sent as inline data and can be used with Gemini code execution I/O
 - Document attachments are converted to text by the hub; they are not yet uploaded as native code-execution input files
 
+Japanese font availability in provider-side code execution environments is provider-managed and may change. In local testing, the following fonts were observed:
+
+- OpenAI/GPT: Noto Sans CJK JP, Noto Serif CJK JP, and IPAex-family fonts when available
+- Claude: IPAGothic (`ipag.ttf`), IPAPGothic (`ipagp.ttf`), Unifont (`unifont.otf`), Unifont-JP (`unifont_jp.otf`), `fonts-japanese-gothic.ttf`, and WenQuanYi Zen Hei (`wqy-zenhei.ttc`)
+- Gemini: IPAGothic (`ipag.ttf` / `ipagp.ttf`) and Unifont-JP (`unifont_jp.otf`)
+
+For robust Japanese plots, instruct the agent to discover available fonts at runtime before rendering.
+
 ## Knowledge Sources
 
 Knowledge sources are reusable document collections that agents can retrieve from during chat.
