@@ -146,7 +146,7 @@ async def test_gemini_provider_reports_error_body():
         raise AssertionError("Expected RuntimeError when Gemini returns an error body")
 
 
-async def test_gemini_provider_adds_selected_tools_to_request():
+async def test_gemini_provider_prefers_code_execution_over_google_search():
     captured = {}
 
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -175,11 +175,41 @@ async def test_gemini_provider_adds_selected_tools_to_request():
     await provider.generate(agent=agent, conversation=[], provider_session_id=None)
 
     assert captured["json"]["tools"] == [
-        {"google_search": {}},
         {"code_execution": {}},
     ]
     system_text = captured["json"]["systemInstruction"]["parts"][0]["text"]
     assert CODE_EXECUTION_CAPABILITY_NOTE in system_text
+
+
+async def test_gemini_provider_adds_google_search_without_code_execution():
+    captured = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured["json"] = json.loads(request.content.decode("utf-8"))
+        return httpx.Response(
+            200,
+            json={"candidates": [{"content": {"parts": [{"text": "done"}]}}]},
+        )
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://generativelanguage.googleapis.com",
+    )
+    provider = GeminiAPIProvider(
+        api_key="gemini-key",
+        default_model="gemini-2.5-pro",
+        http_client=client,
+    )
+    agent = AgentDefinition(
+        id="gemini-search",
+        name="Gemini Search",
+        provider=ProviderKind.GEMINI_API,
+        tools={"web_search": True},
+    )
+
+    await provider.generate(agent=agent, conversation=[], provider_session_id=None)
+
+    assert captured["json"]["tools"] == [{"google_search": {}}]
 
 
 async def test_gemini_provider_collects_inline_generated_files():

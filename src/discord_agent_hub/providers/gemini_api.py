@@ -87,9 +87,10 @@ class GeminiAPIProvider(Provider):
                     }
                 }
             )
-        if agent.tools.get("web_search") and not file_search_store_names:
+        code_execution_enabled = bool(agent.tools.get("code_execution"))
+        if agent.tools.get("web_search") and not file_search_store_names and not code_execution_enabled:
             tools.append({"google_search": {}})
-        if agent.tools.get("code_execution"):
+        if code_execution_enabled:
             tools.append({"code_execution": {}})
         if tools:
             payload["tools"] = tools
