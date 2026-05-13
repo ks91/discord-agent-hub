@@ -8,6 +8,7 @@ import json
 import logging
 import mimetypes
 import os
+from pathlib import Path
 import re
 import tempfile
 import time
@@ -106,6 +107,7 @@ DOWNLOADABLE_CODE_BLOCKS = {
 DOWNLOADABLE_CODE_BLOCK_RE = re.compile(r"```([A-Za-z0-9_-]+)\s*\n(.*?)```", re.DOTALL)
 MAX_DISCORD_GENERATED_FILES = 5
 MAX_DISCORD_GENERATED_FILE_BYTES = 8 * 1024 * 1024
+RUNTIME_FILE_EXTENSIONS = {".ttf", ".otf", ".ttc"}
 
 
 def _extract_downloadable_code_blocks(text: str) -> list[GeneratedFile]:
@@ -179,6 +181,16 @@ async def _extract_supported_attachments(message: discord.Message) -> list[dict[
     for attachment in getattr(message, "attachments", []):
         content_type = attachment.content_type or mimetypes.guess_type(attachment.filename)[0]
         raw = await attachment.read()
+        if Path(attachment.filename).suffix.lower() in RUNTIME_FILE_EXTENSIONS:
+            attachments.append(
+                {
+                    "type": "runtime_file",
+                    "filename": attachment.filename,
+                    "media_type": content_type or "application/octet-stream",
+                    "data": base64.b64encode(raw).decode("ascii"),
+                }
+            )
+            continue
         if content_type and content_type.startswith("image/"):
             attachments.append(
                 {

@@ -235,6 +235,7 @@ Input file handling for code execution is provider-specific:
 
 - OpenAI: image attachments are sent as vision input; generated files can be returned, but user attachments are not yet uploaded into the Code Interpreter container as files
 - Claude: image attachments are sent as vision input and, when `tools.code_execution: true`, also uploaded as `container_upload` files so code execution can process them
+- Claude: `.ttf`, `.otf`, and `.ttc` font attachments are treated as runtime files and uploaded as `container_upload` when `tools.code_execution: true`; this can help plots use Japanese-capable fonts
 - Gemini: image attachments are sent as inline data and can be used with Gemini code execution I/O
 - Document attachments are converted to text by the hub; they are not yet uploaded as native code-execution input files
 

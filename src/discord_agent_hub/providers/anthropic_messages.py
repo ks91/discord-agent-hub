@@ -62,18 +62,19 @@ class AnthropicMessagesProvider(Provider):
             role = "assistant" if item.role == "assistant" else "user"
             content = []
             for attachment in item.attachments:
-                if attachment.get("type") != "image" or role == "assistant":
+                if attachment.get("type") not in {"image", "runtime_file"} or role == "assistant":
                     continue
-                content.append(
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": attachment["media_type"],
-                            "data": attachment["data"],
-                        },
-                    }
-                )
+                if attachment.get("type") == "image":
+                    content.append(
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": attachment["media_type"],
+                                "data": attachment["data"],
+                            },
+                        }
+                    )
                 if code_execution_enabled and role == "user":
                     file_id = await self._upload_container_file(
                         attachment=attachment,
@@ -84,7 +85,11 @@ class AnthropicMessagesProvider(Provider):
             text = render_message_text(item)
             if text.strip() or not content:
                 content.append({"type": "text", "text": text})
-            if not any(part.get("text", "").strip() or part.get("type") == "image" for part in content):
+            if not any(
+                part.get("text", "").strip()
+                or part.get("type") in {"image", "container_upload"}
+                for part in content
+            ):
                 continue
             messages.append(
                 {

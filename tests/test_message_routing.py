@@ -254,6 +254,54 @@ async def test_handle_user_message_ignores_empty_message_with_unsupported_attach
     assert '"original_attachment_count": 1' in event_log
 
 
+async def test_handle_user_message_accepts_runtime_font_attachment(tmp_path):
+    provider = FakeProvider(
+        ProviderResponse(
+            output_text="assistant reply",
+            provider_session_id=None,
+            raw_payload={"ok": True},
+        )
+    )
+    bot = _build_fake_bot(tmp_path, "anthropic_messages", provider)
+    session = bot.hub_store.create_session(
+        agent_id="claude-default",
+        provider="anthropic_messages",
+        discord_channel_id=100,
+        discord_thread_id=200,
+        discord_guild_id=300,
+        created_by_user_id=400,
+    )
+    channel = FakeChannel(200)
+
+    async def read_attachment():
+        return b"font"
+
+    attachment = SimpleNamespace(
+        filename="NotoSansJP-Regular.otf",
+        content_type="font/otf",
+        read=read_attachment,
+    )
+    message = SimpleNamespace(
+        author=SimpleNamespace(id=123, display_name="alice"),
+        content="Use this font",
+        attachments=[attachment],
+        channel=channel,
+    )
+
+    await handle_user_message(bot, message)
+
+    messages = bot.hub_store.list_messages(session.id)
+    assert messages[0].attachments == [
+        {
+            "type": "runtime_file",
+            "filename": "NotoSansJP-Regular.otf",
+            "media_type": "font/otf",
+            "data": "Zm9udA==",
+        }
+    ]
+    assert provider.calls[0]["conversation"][0].attachments == messages[0].attachments
+
+
 async def test_handle_user_message_attaches_latex_source_when_present(tmp_path):
     provider = FakeProvider(
         ProviderResponse(
