@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import base64
 import inspect
 import mimetypes
 from pathlib import Path
+from typing import Any
 
 from openai import AsyncOpenAI
 
@@ -29,6 +31,12 @@ class OpenAIResponsesProvider(Provider):
         provider_session_id: str | None,
     ) -> ProviderResponse:
         instructions = render_provider_instructions(agent)
+        code_execution_enabled = bool(agent.tools.get("code_execution"))
+        uploaded_runtime_files = (
+            await self._upload_runtime_files(conversation)
+            if code_execution_enabled
+            else []
+        )
         input_items = []
         for item in conversation:
             if item.role == "system":
@@ -44,6 +52,15 @@ class OpenAIResponsesProvider(Provider):
                 )
                 content.append({"type": "input_image", "image_url": data_url, "detail": "auto"})
             text = render_message_text(item)
+            runtime_filenames = _runtime_filenames(item.attachments) if role == "user" else []
+            if code_execution_enabled and runtime_filenames:
+                names = ", ".join(f"`{name}`" for name in runtime_filenames)
+                text = (
+                    f"{text}\n\n"
+                    "The following files were uploaded to the OpenAI code interpreter "
+                    f"container: {names}. Use them from the code execution environment "
+                    "when needed."
+                ).strip()
             if text.strip() or not content:
                 content.append({"type": content_type, "text": text})
             if not any(part.get("text", "").strip() or part.get("type") == "input_image" for part in content):
@@ -63,8 +80,12 @@ class OpenAIResponsesProvider(Provider):
         tools = []
         if agent.tools.get("web_search"):
             tools.append({"type": "web_search"})
-        if agent.tools.get("code_execution"):
-            tools.append({"type": "code_interpreter", "container": {"type": "auto"}})
+        if code_execution_enabled:
+            container: dict[str, Any] = {"type": "auto"}
+            file_ids = [item["file_id"] for item in uploaded_runtime_files]
+            if file_ids:
+                container["file_ids"] = file_ids
+            tools.append({"type": "code_interpreter", "container": container})
         vector_store_ids = agent.metadata.get("openai_vector_store_ids")
         if isinstance(vector_store_ids, list) and vector_store_ids:
             tools.append(
@@ -86,6 +107,36 @@ class OpenAIResponsesProvider(Provider):
             usage=self._extract_usage(raw_payload),
             generated_files=await self._collect_generated_files(raw_payload),
         )
+
+    async def _upload_runtime_files(self, conversation: list[MessageRecord]) -> list[dict[str, str]]:
+        uploaded: list[dict[str, str]] = []
+        for item in conversation:
+            if item.role == "assistant":
+                continue
+            for attachment in item.attachments:
+                if attachment.get("type") != "runtime_file":
+                    continue
+                filename = _filename_from_path(str(attachment.get("filename") or "runtime-file"), "runtime-file")
+                media_type = str(attachment.get("media_type") or "application/octet-stream")
+                encoded = attachment.get("data")
+                if not isinstance(encoded, str) or not encoded:
+                    continue
+                try:
+                    data = base64.b64decode(encoded)
+                except Exception:
+                    continue
+                if not data:
+                    continue
+                file_obj = await _maybe_await(
+                    self.client.files.create(
+                        file=(filename, data, media_type),
+                        purpose="user_data",
+                    )
+                )
+                file_id = getattr(file_obj, "id", None)
+                if isinstance(file_id, str) and file_id:
+                    uploaded.append({"file_id": file_id, "filename": filename})
+        return uploaded
 
     @staticmethod
     def _extract_usage(payload: dict) -> dict:
@@ -156,6 +207,17 @@ def _extract_container_ids(value) -> list[str]:
 
     walk(value)
     return list(dict.fromkeys(found))
+
+
+def _runtime_filenames(attachments: list[dict]) -> list[str]:
+    names: list[str] = []
+    for attachment in attachments:
+        if attachment.get("type") != "runtime_file":
+            continue
+        filename = attachment.get("filename")
+        if isinstance(filename, str) and filename:
+            names.append(_filename_from_path(filename, "runtime-file"))
+    return names
 
 
 async def _maybe_await(value):

@@ -22,6 +22,15 @@ class FakeOpenAIClient:
         self.responses = FakeResponsesAPI()
 
 
+class FakeFilesAPI:
+    def __init__(self) -> None:
+        self.calls = []
+
+    async def create(self, *, file, purpose):
+        self.calls.append({"file": file, "purpose": purpose})
+        return SimpleNamespace(id="file_font")
+
+
 class FakeContainerContentAPI:
     def __init__(self) -> None:
         self.calls = []
@@ -65,6 +74,12 @@ class FakeOpenAIClientWithContainers(FakeOpenAIClient):
     def __init__(self) -> None:
         super().__init__()
         self.containers = FakeContainersAPI()
+
+
+class FakeOpenAIClientWithFiles(FakeOpenAIClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.files = FakeFilesAPI()
 
 
 async def test_openai_provider_uses_input_text_for_user_and_output_text_for_assistant():
@@ -164,6 +179,62 @@ async def test_openai_provider_adds_selected_tools_to_request():
     ]
     assert call["tool_choice"] == "auto"
     assert CODE_EXECUTION_CAPABILITY_NOTE in call["instructions"]
+
+
+async def test_openai_provider_uploads_runtime_files_for_code_execution_container():
+    provider = OpenAIResponsesProvider(api_key="test-key", default_model="gpt-5.2")
+    provider.client = FakeOpenAIClientWithFiles()
+    agent = AgentDefinition(
+        id="gpt-tools",
+        name="OpenAI Tools",
+        provider=ProviderKind.OPENAI_RESPONSES,
+        tools={"code_execution": True},
+    )
+    conversation = [
+        MessageRecord(
+            session_id="s1",
+            role="user",
+            author_id=1,
+            author_name="alice",
+            content="Use this font for Japanese labels",
+            attachments=[
+                {
+                    "type": "runtime_file",
+                    "filename": "KozGoPro-Regular.otf",
+                    "media_type": "font/otf",
+                    "data": "Zm9udA==",
+                }
+            ],
+            created_at="2026-04-06T00:00:00+00:00",
+        )
+    ]
+
+    await provider.generate(agent=agent, conversation=conversation, provider_session_id=None)
+
+    assert provider.client.files.calls == [
+        {
+            "file": ("KozGoPro-Regular.otf", b"font", "font/otf"),
+            "purpose": "user_data",
+        }
+    ]
+    call = provider.client.responses.calls[0]
+    assert call["tools"] == [
+        {
+            "type": "code_interpreter",
+            "container": {"type": "auto", "file_ids": ["file_font"]},
+        }
+    ]
+    assert call["input"][0]["content"] == [
+        {
+            "type": "input_text",
+            "text": (
+                "alice: Use this font for Japanese labels\n\n"
+                "The following files were uploaded to the OpenAI code interpreter "
+                "container: `KozGoPro-Regular.otf`. Use them from the code execution "
+                "environment when needed."
+            ),
+        }
+    ]
 
 
 async def test_openai_provider_collects_generated_container_files():
