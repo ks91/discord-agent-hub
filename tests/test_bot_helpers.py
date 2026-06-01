@@ -11,6 +11,7 @@ from discord_agent_hub.bot import (
     _native_knowledge_metadata,
     _notify_agent_watchers,
     _send_interaction_split,
+    knowledge_show,
 )
 from discord_agent_hub.knowledge import KnowledgeChunk
 from discord_agent_hub.models import MessageRecord
@@ -306,6 +307,70 @@ async def test_send_interaction_split_sends_followups_for_long_content():
     assert all(ephemeral is True for _, ephemeral in interaction.followup.calls)
     assert len(interaction.response.calls[0][0]) <= 1800
     assert all(len(text) <= 1800 for text, _ in interaction.followup.calls)
+
+
+class _FakeGuild:
+    id = 1
+
+
+class _FakeKnowledgeStore:
+    def get_knowledge_sources(self, source_ids):
+        return [
+            {
+                "id": source_ids[0],
+                "backend": "hub_lexical",
+                "remote_store_id": None,
+                "created_at": "2026-04-01T00:00:00+00:00",
+                "created_by_user_id": 123,
+            }
+        ]
+
+    def list_knowledge_documents(self, source_id):
+        return [
+            {
+                "filename": "notes.md",
+                "media_type": "text/markdown",
+                "text_chars": 100,
+                "chunk_count": 2,
+                "created_at": "2026-04-01T00:00:01+00:00",
+            }
+        ]
+
+
+class _FakeKnowledgeBot:
+    def __init__(self) -> None:
+        self.hub_store = _FakeKnowledgeStore()
+
+    def guild_allowed(self, guild) -> bool:
+        return True
+
+
+class _FakeKnowledgeInteraction(_FakeInteraction):
+    def __init__(self) -> None:
+        super().__init__()
+        self.client = _FakeKnowledgeBot()
+        self.guild = _FakeGuild()
+
+
+async def test_knowledge_show_runs_storage_calls_off_event_loop(monkeypatch):
+    calls = []
+
+    async def fake_to_thread(func, *args):
+        calls.append((func.__name__, args))
+        return func(*args)
+
+    monkeypatch.setattr("discord_agent_hub.bot.asyncio.to_thread", fake_to_thread)
+    monkeypatch.setattr("discord_agent_hub.bot.DiscordAgentHub", _FakeKnowledgeBot)
+    interaction = _FakeKnowledgeInteraction()
+
+    await knowledge_show.callback(interaction, source_id="course-source")
+
+    assert calls == [
+        ("get_knowledge_sources", (["course-source"],)),
+        ("list_knowledge_documents", ("course-source",)),
+    ]
+    assert "ID: `course-source`" in interaction.response.calls[0][0]
+    assert "`notes.md`" in interaction.response.calls[0][0]
 
 
 def test_merge_agent_metadata_defaults_to_importing_user():

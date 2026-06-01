@@ -1208,7 +1208,7 @@ async def knowledge_list(interaction: discord.Interaction) -> None:
         await interaction.response.send_message("This server is not allowed.", ephemeral=True)
         return
 
-    sources = bot.hub_store.list_knowledge_sources()
+    sources = await asyncio.to_thread(bot.hub_store.list_knowledge_sources)
     if not sources:
         await interaction.response.send_message("No knowledge sources imported yet.", ephemeral=True)
         return
@@ -1230,7 +1230,7 @@ async def knowledge_show(interaction: discord.Interaction, source_id: str) -> No
         await interaction.response.send_message("This server is not allowed.", ephemeral=True)
         return
 
-    sources = bot.hub_store.get_knowledge_sources([source_id])
+    sources = await asyncio.to_thread(bot.hub_store.get_knowledge_sources, [source_id])
     if not sources:
         await interaction.response.send_message(
             f"Unknown knowledge source: `{source_id}`. Use `/knowledge-list` to see valid sources.",
@@ -1239,7 +1239,7 @@ async def knowledge_show(interaction: discord.Interaction, source_id: str) -> No
         return
 
     source = sources[0]
-    documents = bot.hub_store.list_knowledge_documents(source_id)
+    documents = await asyncio.to_thread(bot.hub_store.list_knowledge_documents, source_id)
     lines = [
         f"ID: `{source['id']}`",
         f"Backend: `{source['backend']}`",
