@@ -1,3 +1,7 @@
+from types import SimpleNamespace
+
+import discord
+
 from discord_agent_hub.bot import (
     _agent_show_lines,
     _agent_update_notification_recipient_ids,
@@ -11,6 +15,7 @@ from discord_agent_hub.bot import (
     _native_knowledge_metadata,
     _notify_agent_watchers,
     _send_interaction_split,
+    chat,
     knowledge_show,
 )
 from discord_agent_hub.knowledge import KnowledgeChunk
@@ -277,7 +282,7 @@ class _FakeResponse:
     def __init__(self) -> None:
         self.calls = []
 
-    async def send_message(self, content: str, ephemeral: bool) -> None:
+    async def send_message(self, content: str, ephemeral: bool = False) -> None:
         self.calls.append((content, ephemeral))
 
 
@@ -350,6 +355,102 @@ class _FakeKnowledgeInteraction(_FakeInteraction):
         super().__init__()
         self.client = _FakeKnowledgeBot()
         self.guild = _FakeGuild()
+
+
+class _FakeThreadChannel:
+    def __init__(self, channel_id: int = 200, parent_id: int = 100) -> None:
+        self.id = channel_id
+        self.parent_id = parent_id
+        self.sent_messages = []
+
+    async def send(self, content: str) -> None:
+        self.sent_messages.append(content)
+
+
+class _FakeOriginalResponse:
+    def __init__(self, *, thread=None, fail_public: bool = False) -> None:
+        self.thread = thread or _FakeThreadChannel()
+        self.fail_public = fail_public
+        self.create_thread_calls = []
+
+    async def create_thread(self, **kwargs):
+        self.create_thread_calls.append(kwargs)
+        if self.fail_public:
+            raise _FakeDiscordHTTPException("missing public thread permission")
+        return self.thread
+
+
+class _FakeDiscordHTTPException(discord.HTTPException):
+    def __init__(self, message: str) -> None:
+        Exception.__init__(self, message)
+
+
+class _FakeTextChannel:
+    id = 100
+
+    def __init__(self) -> None:
+        self.private_thread = _FakeThreadChannel(channel_id=201, parent_id=100)
+        self.create_thread_calls = []
+
+    async def create_thread(self, **kwargs):
+        self.create_thread_calls.append(kwargs)
+        return self.private_thread
+
+
+class _FakeChatBot:
+    def __init__(self, tmp_path) -> None:
+        self.agent_store = AgentStore(tmp_path / "agents.json")
+        self.hub_store = HubStore(tmp_path / "hub.sqlite3")
+        self.settings = SimpleNamespace(
+            default_agent_id="gpt-default",
+            disallowed_role_ids=set(),
+        )
+        self.structured_logger = SimpleNamespace(append=lambda *args, **kwargs: None)
+
+    def guild_allowed(self, guild) -> bool:
+        return True
+
+
+class _FakeChatInteraction(_FakeInteraction):
+    def __init__(self, tmp_path, channel, *, original_response=None) -> None:
+        super().__init__()
+        self.client = _FakeChatBot(tmp_path)
+        self.channel = channel
+        self.guild = _FakeGuild()
+        self.guild_id = 300
+        self.user = SimpleNamespace(id=400, display_name="alice")
+        self._original_response = original_response or _FakeOriginalResponse()
+
+    async def original_response(self):
+        return self._original_response
+
+
+async def test_chat_falls_back_to_private_thread_creation(tmp_path, monkeypatch):
+    monkeypatch.setattr("discord_agent_hub.bot.DiscordAgentHub", _FakeChatBot)
+    monkeypatch.setattr("discord_agent_hub.bot.discord.TextChannel", _FakeTextChannel)
+    channel = _FakeTextChannel()
+    original_response = _FakeOriginalResponse(fail_public=True)
+    interaction = _FakeChatInteraction(tmp_path, channel, original_response=original_response)
+
+    await chat.callback(interaction, agent_id="gpt-default")
+
+    session = interaction.client.hub_store.get_session_by_thread_id(201)
+    assert session is not None
+    assert session.agent_id == "gpt-default"
+    assert session.discord_channel_id == 100
+    assert session.discord_thread_id == 201
+    assert interaction.response.calls[0] == (
+        "Starting session with `gpt-default` / `openai_responses`",
+        False,
+    )
+    assert original_response.create_thread_calls
+    assert channel.create_thread_calls[0]["type"] == discord.ChannelType.private_thread
+    assert channel.private_thread.sent_messages == [
+        f"Session started.\n"
+        f"- session_id: `{session.id}`\n"
+        f"- agent_id: `gpt-default`\n"
+        f"- provider: `openai_responses`"
+    ]
 
 
 async def test_knowledge_show_runs_storage_calls_off_event_loop(monkeypatch):

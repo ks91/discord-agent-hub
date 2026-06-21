@@ -139,7 +139,8 @@ When this is set, commands are synced to that guild immediately instead of waiti
 - `/log-export`: exports the current session transcript and JSONL events
 - `/usage-report`: shows a lightweight usage summary for the current server
 - `/chat [agent_id]`: creates a Discord thread and starts a session
-- Messages sent inside that thread are routed to the session's provider
+- In a private text channel, `/chat` works if the bot has access to that channel and permission to create public or private threads
+- Messages sent inside the session thread are routed to the session's provider
 
 For exported event logs, you can render JSONL into a more readable Markdown timeline with:
 
@@ -179,7 +180,7 @@ The fastest way to start is:
    `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` or `GEMINI_API_KEY`
 3. Start the bot with `python -m discord_agent_hub.main`
 4. In Discord, run `/agent-list`
-5. Start a thread with one of:
+5. Start a session with one of:
    `/chat agent_id:gpt-default`
    `/chat agent_id:claude-default`
    `/chat agent_id:gemini-default`

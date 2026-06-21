@@ -553,6 +553,36 @@ def _current_session(bot: DiscordAgentHub, channel) -> object | None:
     return bot.hub_store.get_session_by_thread_id(channel_id)
 
 
+async def _create_session_thread_from_interaction(
+    interaction: discord.Interaction,
+    *,
+    name: str,
+) -> discord.Thread:
+    message = await interaction.original_response()
+    try:
+        return await message.create_thread(
+            name=name,
+            auto_archive_duration=1440,
+            reason="discord-agent-hub",
+        )
+    except discord.HTTPException as public_exc:
+        channel = interaction.channel
+        if not isinstance(channel, discord.TextChannel):
+            raise RuntimeError(f"Could not create a session thread: {public_exc}") from public_exc
+        try:
+            return await channel.create_thread(
+                name=name,
+                auto_archive_duration=1440,
+                type=discord.ChannelType.private_thread,
+                reason="discord-agent-hub",
+            )
+        except discord.HTTPException as private_exc:
+            raise RuntimeError(
+                "Could not create a session thread. Check that the bot has permission "
+                "to create public or private threads in this channel."
+            ) from private_exc
+
+
 def _summarize_usage(events: list[dict]) -> dict[str, int]:
     totals = {
         "input_tokens": 0,
@@ -1408,12 +1438,21 @@ async def chat(interaction: discord.Interaction, agent_id: str | None = None) ->
     await interaction.response.send_message(
         f"Starting session with `{agent.id}` / `{agent.provider.value}`"
     )
-    message = await interaction.original_response()
-    thread = await message.create_thread(
-        name=f"hub-{interaction.user.display_name[:20]}",
-        auto_archive_duration=1440,
-        reason="discord-agent-hub",
-    )
+    try:
+        thread = await _create_session_thread_from_interaction(
+            interaction,
+            name=f"hub-{interaction.user.display_name[:20]}",
+        )
+    except RuntimeError as exc:
+        bot.structured_logger.append(
+            "session.thread_create_failed",
+            discord_guild_id=interaction.guild_id,
+            discord_channel_id=interaction.channel.id,
+            created_by_user_id=interaction.user.id,
+            error=str(exc),
+        )
+        await interaction.followup.send(str(exc), ephemeral=True)
+        return
     session = bot.hub_store.create_session(
         agent_id=agent.id,
         provider=agent.provider.value,
