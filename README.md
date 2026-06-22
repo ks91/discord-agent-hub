@@ -142,6 +142,15 @@ When this is set, commands are synced to that guild immediately instead of waiti
 - In a private text channel, `/chat` works if the bot has access to that channel and permission to create public or private threads
 - Messages sent inside the session thread are routed to the session's provider
 
+For private text channels, Discord server-wide app permissions may not be enough. Add the bot role or bot user to the target channel's permission settings and explicitly allow:
+
+- `View Channel`
+- `Send Messages`
+- `Create Public Threads` or `Create Private Threads`
+- `Send Messages in Threads`
+- `Read Message History`
+- `Use Application Commands`
+
 For exported event logs, you can render JSONL into a more readable Markdown timeline with:
 
 - `scripts/render-events-md.py path/to/events.jsonl`
