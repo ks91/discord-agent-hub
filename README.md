@@ -289,6 +289,14 @@ Use `overwrite:true` to replace the whole knowledge source with the uploaded fil
 
 Without `overwrite:true`, importing another file with the same `source_id` appends that document to the existing source.
 
+For OpenAI `file_search`, one `openai_file_search` source corresponds to one OpenAI vector store. The OpenAI Responses API allows at most 2 vector stores in one request, so avoid splitting one related document set into many OpenAI sources. Prefer importing multiple files into the same `source_id`:
+
+```text
+/knowledge-import source_id:gpt-papers file:(attention.pdf) backend:openai_file_search
+/knowledge-import source_id:gpt-papers file:(gpt2.pdf) backend:openai_file_search
+/knowledge-import source_id:gpt-papers file:(gpt3.pdf) backend:openai_file_search
+```
+
 You can choose a backend:
 
 ```text
