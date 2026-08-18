@@ -81,6 +81,16 @@ async def test_gemini_provider_maps_conversation_and_extracts_text():
     }
 
 
+def test_gemini_provider_uses_configured_timeout():
+    provider = GeminiAPIProvider(
+        api_key="gemini-key",
+        default_model="gemini-2.5-pro",
+        timeout_seconds=123.0,
+    )
+
+    assert provider.http_client.timeout.read == 123.0
+
+
 def test_gemini_provider_extracts_cached_input_tokens():
     usage = GeminiAPIProvider._extract_usage(
         {

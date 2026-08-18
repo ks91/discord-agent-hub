@@ -1,6 +1,8 @@
 import asyncio
 from types import SimpleNamespace
 
+import httpx
+
 from discord_agent_hub.bot import (
     _compact_conversation_for_provider,
     _extract_downloadable_code_blocks,
@@ -69,6 +71,22 @@ class HangingProvider:
         await asyncio.sleep(0.05)
         return ProviderResponse(
             output_text="late reply",
+            provider_session_id=provider_session_id,
+            raw_payload={"ok": True},
+        )
+
+
+class ReadTimeoutProvider:
+    def __init__(self, failures: int) -> None:
+        self.failures = failures
+        self.calls = 0
+
+    async def generate(self, *, agent, conversation, provider_session_id):
+        self.calls += 1
+        if self.calls <= self.failures:
+            raise httpx.ReadTimeout("")
+        return ProviderResponse(
+            output_text="recovered reply",
             provider_session_id=provider_session_id,
             raw_payload={"ok": True},
         )
@@ -498,6 +516,33 @@ async def test_handle_user_message_retries_retryable_provider_errors(tmp_path):
     assert channel.sent_messages == ["recovered reply"]
     event_log = (tmp_path / "events.jsonl").read_text(encoding="utf-8")
     assert "provider.retry" in event_log
+
+
+async def test_handle_user_message_logs_timeout_exception_type(tmp_path):
+    provider = ReadTimeoutProvider(failures=1)
+    bot = _build_fake_bot(tmp_path, "openai_responses", provider)
+    bot.settings.provider_max_retries = 1
+    bot.hub_store.create_session(
+        agent_id="gpt-default",
+        provider="openai_responses",
+        discord_channel_id=100,
+        discord_thread_id=200,
+        discord_guild_id=300,
+        created_by_user_id=400,
+    )
+    channel = FakeChannel(200)
+    message = SimpleNamespace(
+        author=SimpleNamespace(id=123, display_name="alice"),
+        content="hello world",
+        channel=channel,
+    )
+
+    await handle_user_message(bot, message)
+
+    assert provider.calls == 2
+    assert channel.sent_messages == ["recovered reply"]
+    event_log = (tmp_path / "events.jsonl").read_text(encoding="utf-8")
+    assert '"error": "ReadTimeout"' in event_log
 
 
 async def test_handle_user_message_reports_timeout_after_retry_budget(tmp_path):

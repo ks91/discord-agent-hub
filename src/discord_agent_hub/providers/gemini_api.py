@@ -21,13 +21,14 @@ class GeminiAPIProvider(Provider):
         *,
         api_key: str | None,
         default_model: str,
+        timeout_seconds: float = 60.0,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
         self.api_key = api_key
         self.default_model = default_model
         self.http_client = http_client or httpx.AsyncClient(
             base_url="https://generativelanguage.googleapis.com",
-            timeout=60.0,
+            timeout=timeout_seconds,
         )
 
     async def generate(

@@ -29,6 +29,7 @@ def build_bot() -> DiscordAgentHub:
         AnthropicMessagesProvider(
             api_key=settings.anthropic_api_key,
             default_model=settings.anthropic_model,
+            timeout_seconds=settings.provider_request_timeout_seconds,
         ),
     )
     providers.register(
@@ -36,6 +37,7 @@ def build_bot() -> DiscordAgentHub:
         GeminiAPIProvider(
             api_key=settings.gemini_api_key,
             default_model=settings.gemini_model,
+            timeout_seconds=settings.provider_request_timeout_seconds,
         ),
     )
     providers.register(

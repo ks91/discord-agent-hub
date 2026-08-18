@@ -145,6 +145,16 @@ async def test_anthropic_provider_requires_api_key():
         raise AssertionError("Expected RuntimeError when API key is missing")
 
 
+def test_anthropic_provider_uses_configured_timeout():
+    provider = AnthropicMessagesProvider(
+        api_key="test-key",
+        default_model="claude-sonnet-4-0",
+        timeout_seconds=123.0,
+    )
+
+    assert provider.http_client.timeout.read == 123.0
+
+
 async def test_anthropic_provider_adds_selected_tools_and_beta_header():
     captured = {}
 

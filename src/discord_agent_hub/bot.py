@@ -290,6 +290,13 @@ def _is_retryable_provider_error(exc: Exception) -> bool:
     return False
 
 
+def _exception_summary(exc: Exception) -> str:
+    text = str(exc).strip()
+    if text:
+        return text
+    return type(exc).__name__
+
+
 async def _generate_with_retry(
     *,
     bot: DiscordAgentHub,
@@ -326,12 +333,12 @@ async def _generate_with_retry(
                     attempt=attempt + 1,
                     next_attempt=attempt + 2,
                     delay_seconds=delay_seconds,
-                    error=str(exc),
+                    error=_exception_summary(exc),
                 )
                 if delay_seconds:
                     await asyncio.sleep(delay_seconds)
                 continue
-            if isinstance(exc, asyncio.TimeoutError):
+            if isinstance(exc, (asyncio.TimeoutError, httpx.TimeoutException)):
                 raise RuntimeError(f"Provider timed out after {timeout_seconds:g}s") from exc
             raise
 
